@@ -9,10 +9,10 @@
 
 #include "secrets.h"
 
-void waitForNewGPSLocation();
-
 static const int RXPin = 13, TXPin = 14;
 static const uint32_t GPSBaud = 38400;
+
+const GFXfont *defaultFont = &DejaVu18;
 
 LGFX display;
 OpenStreetMap osm;
@@ -21,37 +21,10 @@ TinyGPSPlus gps;
 
 int zoom = 15;
 
-void setup()
-{
-    Serial.begin(115200);
+double currentLatitude;
+double currentLongitude;
 
-    hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
-
-    display.setRotation(0);
-    display.setBrightness(110);
-    display.begin();
-
-    display.drawString("Connecting WiFi", 0, 0, &DejaVu12);
-
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(10);
-        Serial.print(".");
-    }
-
-    vTaskPrioritySet(NULL, 9);
-
-    display.drawString("Waiting for location", 0, 15, &DejaVu12);
-
-    waitForNewGPSLocation();
-
-    log_i("longitude: %f", gps.location.lng());
-    log_i("latitude: %f", gps.location.lat());
-
-    display.drawString("Fetching osm tiles...", 0, 30, &DejaVu12);
-
-}
+void waitForNewGPSLocation();
 
 double haversineDistance(double lat1, double lng1, double lat2, double lng2)
 {
@@ -67,48 +40,121 @@ double haversineDistance(double lat1, double lng1, double lat2, double lng2)
     return earthRadius * c;
 }
 
-void displayInfo()
+enum statusBarType
 {
-    Serial.print(F("Location: "));
-    if (gps.location.isValid())
+    SHOW_STATUS,
+    STRING
+};
+
+bool showStatusBar(statusBarType type, String &result)
+{
+    static LGFX_Sprite bar(&display);
+
+    if (bar.width() != display.width())
     {
-        Serial.print(gps.location.lat(), 6);
-        Serial.print(F(","));
-        Serial.print(gps.location.lng(), 6);
-        Serial.println();
+        bar.setPsram(true);
+        bar.deleteSprite();
+        bar.setFont(defaultFont);
+        bar.createSprite(display.width(), defaultFont->yAdvance);
+        if (!bar.getBuffer())
+        {
+            result = "could not allocate statusbar";
+            return false;
+        }
     }
-    else
+
+    bar.clear();
+
+    switch (type)
     {
-        Serial.print(F("INVALID"));
+    case STRING:
+        bar.drawString(result, 0, 0);
+        break;
+    case SHOW_STATUS:
+    {
+        char buffer[30];
+        snprintf(buffer, sizeof(buffer), "% 4d km/h", static_cast<int>(gps.speed.kmph()));
+        bar.drawString(buffer, 0, 0, defaultFont);
+
+        const double homeDistance = haversineDistance(homeLatitude, homeLongitude, currentLatitude, currentLongitude);
+        snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
+        bar.drawRightString(buffer, bar.width(), 0, defaultFont);
+
+        snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
+        bar.drawCenterString(buffer, 140, 0, defaultFont);
+
+        break;
     }
+    }
+
+    bar.pushSprite(0, 0);
+    return true;
+}
+
+void setup()
+{
+    Serial.begin(115200);
+
+    hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
+
+    display.setRotation(0);
+    display.setBrightness(110);
+    display.begin();
+
+    String result = "Connecting WiFi"; // Use the result String as input
+    showStatusBar(STRING, result);
+
+    WiFi.setSleep(false);
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED)
+        delay(5);
+
+    vTaskPrioritySet(NULL, 9);
+
+    result = "Waiting for location";
+    showStatusBar(STRING, result);
+
+    waitForNewGPSLocation();
+
+    log_i("longitude: %f", gps.location.lng());
+    log_i("latitude: %f", gps.location.lat());
+
+    osm.setSize(display.width(), display.height() - defaultFont->yAdvance);
+
+    display.clear();
 }
 
 void loop()
 {
     waitForNewGPSLocation();
 
-    double newLat = gps.location.lat();
-    double newLng = gps.location.lng();
+    currentLatitude = gps.location.lat();
+    currentLongitude = gps.location.lng();
 
-    static LGFX_Sprite map(&display);
-    const bool success = osm.fetchMap(map, newLng, newLat, zoom);
-    if (success)
+    String result;
+    showStatusBar(SHOW_STATUS, result);
+
+    static unsigned long initTimeMs = millis();
+    static unsigned long lastUpdateMs = 0;
+    if (millis() - lastUpdateMs > 750)
     {
-        // draw a circle marking the location
-        map.drawCircle(map.width() / 2, map.height() / 2, 10, TFT_DARKCYAN);
-        map.drawCircle(map.width() / 2, map.height() / 2, 6, TFT_DARKCYAN);
-        map.drawCircle(map.width() / 2, map.height() / 2, 3, TFT_DARKCYAN);
+        static LGFX_Sprite map(&display);
+        const bool success = osm.fetchMap(map, currentLongitude, currentLatitude, zoom);
+        if (success)
+        {
+            map.drawCircle(map.width() / 2, map.height() / 2, 10, TFT_DARKCYAN);
+            map.drawCircle(map.width() / 2, map.height() / 2, 6, TFT_DARKCYAN);
+            map.drawCircle(map.width() / 2, map.height() / 2, 3, TFT_BLACK);
 
-        char buffer[30];
-        snprintf(buffer, sizeof(buffer), " %d km/h ", static_cast<int>(gps.speed.kmph()));
-        map.drawString(buffer, 0, 0, &DejaVu18);
+            if (millis() - initTimeMs < 4000)
+            {
+                map.drawCenterString("ESP32 OSM tracker", map.width() / 2, 30, defaultFont);
+                map.drawCenterString("0.99.2", map.width() / 2, 70, defaultFont);
+            }
 
-        //calulate the distance to home
-        const double homeDistance =  haversineDistance(homeLatitude, homeLongitude, newLat, newLng);
-        snprintf(buffer, sizeof(buffer), " Home: %i km ", static_cast<int>(homeDistance / 1000));
-        map.drawRightString(buffer, map.width(), 0, &DejaVu18);
-
-        map.pushSprite(0, 0);
+            map.pushSprite(0, defaultFont->yAdvance);
+        }
+        lastUpdateMs = millis();
     }
 }
 
