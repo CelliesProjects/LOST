@@ -14,9 +14,10 @@ static const uint32_t GPSBaud = 38400;
 
 const GFXfont *defaultFont = &DejaVu18;
 
+HardwareSerial hws(2);
+
 LGFX display;
 OpenStreetMap osm;
-HardwareSerial hws(2);
 TinyGPSPlus gps;
 
 int zoom = 15;
@@ -43,7 +44,7 @@ double haversineDistance(double lat1, double lng1, double lat2, double lng2)
 enum statusBarType
 {
     SHOW_STATUS,
-    STRING
+    SHOW_STRING
 };
 
 bool showStatusBar(statusBarType type, String &result)
@@ -67,13 +68,13 @@ bool showStatusBar(statusBarType type, String &result)
 
     switch (type)
     {
-    case STRING:
-        bar.drawString(result, 0, 0);
+    case SHOW_STRING:
+        bar.drawCenterString(result, bar.width() / 2, 0);
         break;
     case SHOW_STATUS:
     {
         char buffer[30];
-        snprintf(buffer, sizeof(buffer), "% 4d km/h", static_cast<int>(gps.speed.kmph()));
+        snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
         bar.drawString(buffer, 0, 0, defaultFont);
 
         const double homeDistance = haversineDistance(homeLatitude, homeLongitude, currentLatitude, currentLongitude);
@@ -85,10 +86,39 @@ bool showStatusBar(statusBarType type, String &result)
 
         break;
     }
+    default:
+        log_w("unhandled status bar type");
     }
 
     bar.pushSprite(0, 0);
     return true;
+}
+
+void drawMap(double longitude, double latitude, uint8_t zoom)
+{
+    static unsigned long initTimeMs = millis();
+    static LGFX_Sprite map(&display);
+    const bool success = osm.fetchMap(map, longitude, latitude, zoom);
+    if (success)
+    {
+        map.drawCircle(map.width() / 2, map.height() / 2, 10, TFT_DARKCYAN);
+        map.drawCircle(map.width() / 2, map.height() / 2, 6, TFT_DARKCYAN);
+        map.drawCircle(map.width() / 2, map.height() / 2, 3, TFT_BLACK);
+
+        if (millis() - initTimeMs < 4000)
+        {
+            map.drawCenterString("OSM tracker", map.width() / 2, 30, defaultFont);
+            map.drawCenterString("0.99.2", map.width() / 2, 70, defaultFont);
+        }
+
+        map.pushSprite(0, defaultFont->yAdvance);
+    }
+    else
+    {
+        String error = "Failed to fetch map";
+        showStatusBar(SHOW_STRING, error); // will be barely visible before overwritten
+        log_e("%s", error.c_str());
+    }
 }
 
 void setup()
@@ -101,8 +131,8 @@ void setup()
     display.setBrightness(110);
     display.begin();
 
-    String result = "Connecting WiFi"; // Use the result String as input
-    showStatusBar(STRING, result);
+    String str = "Connecting WiFi";
+    showStatusBar(SHOW_STRING, str);
 
     WiFi.setSleep(false);
     WiFi.begin(ssid, password);
@@ -111,78 +141,56 @@ void setup()
 
     vTaskPrioritySet(NULL, 9);
 
-    result = "Waiting for location";
-    showStatusBar(STRING, result);
-
     osm.setSize(display.width(), display.height() - defaultFont->yAdvance);
     osm.resizeTilesCache(20);
+
+    str = "Waiting for location";
+    showStatusBar(SHOW_STRING, str);
 }
 
 void loop()
 {
-    constexpr unsigned long gpsTimeoutThreshold = 2000;
+    constexpr unsigned long gpsTimeoutThreshold = 1500;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
         if (millis() - lastGpsUpdate > gpsTimeoutThreshold)
         {
             String result = "GPS Wiring or Antenna Error";
-            showStatusBar(STRING, result);
+            showStatusBar(SHOW_STRING, result);
             lastGpsUpdate = millis();
         }
         return;
     }
-    lastGpsUpdate = millis(); // Reset timeout tracker
+    lastGpsUpdate = millis();
+
+    String str;
+    showStatusBar(SHOW_STATUS, str);
 
     currentLatitude = gps.location.lat();
     currentLongitude = gps.location.lng();
 
-    String result;
-    showStatusBar(SHOW_STATUS, result);
-
-    static unsigned long initTimeMs = millis();
     static unsigned long lastUpdateMs = 0;
     if (millis() - lastUpdateMs > 750)
     {
-        static LGFX_Sprite map(&display);
-        const bool success = osm.fetchMap(map, currentLongitude, currentLatitude, zoom);
-        if (success)
-        {
-            map.drawCircle(map.width() / 2, map.height() / 2, 10, TFT_DARKCYAN);
-            map.drawCircle(map.width() / 2, map.height() / 2, 6, TFT_DARKCYAN);
-            map.drawCircle(map.width() / 2, map.height() / 2, 3, TFT_BLACK);
-
-            if (millis() - initTimeMs < 4000)
-            {
-                map.drawCenterString("ESP32 OSM tracker", map.width() / 2, 30, defaultFont);
-                map.drawCenterString("0.99.2", map.width() / 2, 70, defaultFont);
-            }
-
-            map.pushSprite(0, defaultFont->yAdvance);
-        }
+        drawMap(currentLongitude, currentLatitude, zoom);
         lastUpdateMs = millis();
     }
 }
 
 bool waitForNewGPSLocation(unsigned long timeoutMs)
 {
-    constexpr uint32_t STALE_TIME = 500;
-    unsigned long startTime = millis();
-
+    constexpr uint32_t STALETIME_MS = 5;
+    const unsigned long startTime = millis();
     while (true)
     {
         while (hws.available() > 0)
-        {
-            if (gps.encode(hws.read()))
-            {
-                if (gps.location.isValid() && gps.location.age() < STALE_TIME)
-                    return true;
-            }
-        }
+            if (gps.encode(hws.read()) && (gps.location.isValid() && gps.location.age() < STALETIME_MS))
+                return true;
 
         if (millis() - startTime > timeoutMs)
             return false;
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(STALETIME_MS));
     }
 }
