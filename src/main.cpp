@@ -24,7 +24,7 @@ int zoom = 15;
 double currentLatitude;
 double currentLongitude;
 
-void waitForNewGPSLocation();
+bool waitForNewGPSLocation(unsigned long timeoutMs);
 
 double haversineDistance(double lat1, double lng1, double lat2, double lng2)
 {
@@ -114,19 +114,25 @@ void setup()
     result = "Waiting for location";
     showStatusBar(STRING, result);
 
-    waitForNewGPSLocation();
-
-    log_i("longitude: %f", gps.location.lng());
-    log_i("latitude: %f", gps.location.lat());
-
     osm.setSize(display.width(), display.height() - defaultFont->yAdvance);
-
-    display.clear();
+    osm.resizeTilesCache(20);
 }
 
 void loop()
 {
-    waitForNewGPSLocation();
+    constexpr unsigned long gpsTimeoutThreshold = 2000;
+    static unsigned long lastGpsUpdate = millis();
+    if (!waitForNewGPSLocation(10))
+    {
+        if (millis() - lastGpsUpdate > gpsTimeoutThreshold)
+        {
+            String result = "GPS Wiring or Antenna Error";
+            showStatusBar(STRING, result);
+            lastGpsUpdate = millis();
+        }
+        return;
+    }
+    lastGpsUpdate = millis(); // Reset timeout tracker
 
     currentLatitude = gps.location.lat();
     currentLongitude = gps.location.lng();
@@ -158,16 +164,25 @@ void loop()
     }
 }
 
-void waitForNewGPSLocation()
+bool waitForNewGPSLocation(unsigned long timeoutMs)
 {
+    constexpr uint32_t STALE_TIME = 500;
+    unsigned long startTime = millis();
+
     while (true)
     {
-        while (hws.available())
-            gps.encode(hws.read());
+        while (hws.available() > 0)
+        {
+            if (gps.encode(hws.read()))
+            {
+                if (gps.location.isValid() && gps.location.age() < STALE_TIME)
+                    return true;
+            }
+        }
 
-        if (gps.location.isUpdated() && gps.location.isValid())
-            break;
+        if (millis() - startTime > timeoutMs)
+            return false;
 
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
