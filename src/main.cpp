@@ -14,13 +14,11 @@ static const uint32_t GPSBaud = 38400;
 static const GFXfont *defaultFont = &DejaVu18;
 
 HardwareSerial hws(2);
-
 LGFX display;
 OpenStreetMap osm;
 TinyGPSPlus gps;
 
 int zoom = 15;
-
 double currentLatitude;
 double currentLongitude;
 
@@ -162,33 +160,34 @@ void setup()
     showStatusBar(SHOW_STRING, str);
 }
 
-constexpr int32_t MENU_HEIGHT = 40;
-constexpr int32_t MENU_Y = 200;
-constexpr int32_t BUTTON_WIDTH = 106;
-
-constexpr int32_t BUTTON_X[] = {0, 107, 214};
-constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
-
-void drawButtons(LGFX_Device &dest)
-{
-    for (int i = 0; i < 3; i++)
-        dest.fillRect(BUTTON_X[i], MENU_Y, BUTTON_WIDTH, MENU_HEIGHT, BUTTON_COLORS[i]);
-}
-
 bool checkButtons(LGFX_Device &dest)
 {
+
+    constexpr int32_t MENU_HEIGHT = 40;
+    constexpr int32_t BUTTON_START_Y = 200;
+    constexpr int32_t BUTTON_WIDTH = 106;
+
+    constexpr int32_t BUTTON_X[] = {0, 107, 214};
+    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
+
     uint16_t x, y;
-    if (!dest.getTouch(&x, &y) || y <= MENU_Y)
+    if (!dest.getTouch(&x, &y) || y <= BUTTON_START_Y)
         return false;
 
-    int buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1
-                                                                : 2;
+    uint8_t buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1
+                                                                    : 2;
     int32_t buttonX = BUTTON_X[buttonIndex];
     uint16_t color = BUTTON_COLORS[buttonIndex];
 
     dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, color);
 
-    log_i("button %i pressed", buttonIndex);
+    int32_t textX = buttonX + (BUTTON_WIDTH / 2);
+    int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
+
+    const char *menu[] = {"Start", "Home", "Stop"};
+    dest.setTextDatum(textdatum_t::middle_center);
+    dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
+    dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
 
     switch (buttonIndex)
     {
@@ -211,7 +210,7 @@ bool checkButtons(LGFX_Device &dest)
         break;
     }
 
-    delay(5);
+    delay(buttonIndex == 1 ? 50 : 300);
 
     return true;
 }
@@ -248,21 +247,3 @@ void loop()
         lastUpdateMs = millis();
     }
 }
-/*
-bool waitForNewGPSLocation(unsigned long timeoutMs)
-{
-    constexpr uint32_t STALETIME_MS = 5;
-    const unsigned long startTime = millis();
-    while (true)
-    {
-        while (hws.available() > 0)
-            if (gps.encode(hws.read()) && gps.location.isValid() && gps.location.age() < STALETIME_MS)
-                return true;
-
-        if (millis() - startTime > timeoutMs)
-            return false;
-
-        vTaskDelay(pdMS_TO_TICKS(STALETIME_MS));
-    }
-}
-*/
