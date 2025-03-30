@@ -11,8 +11,7 @@
 
 static const int RXPin = 13, TXPin = 14;
 static const uint32_t GPSBaud = 38400;
-
-const GFXfont *defaultFont = &DejaVu18;
+static const GFXfont *defaultFont = &DejaVu18;
 
 HardwareSerial hws(2);
 
@@ -25,7 +24,22 @@ int zoom = 15;
 double currentLatitude;
 double currentLongitude;
 
-bool waitForNewGPSLocation(unsigned long timeoutMs);
+bool waitForNewGPSLocation(unsigned long timeoutMs)
+{
+    constexpr uint32_t STALETIME_MS = 5;
+    const unsigned long startTime = millis();
+    while (true)
+    {
+        while (hws.available() > 0)
+            if (gps.encode(hws.read()) && gps.location.isValid() && gps.location.age() < STALETIME_MS)
+                return true;
+
+        if (millis() - startTime > timeoutMs)
+            return false;
+
+        vTaskDelay(pdMS_TO_TICKS(STALETIME_MS));
+    }
+}
 
 double haversineDistance(double lat1, double lng1, double lat2, double lng2)
 {
@@ -77,12 +91,12 @@ bool showStatusBar(statusBarType type, String &result)
         snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
         bar.drawString(buffer, 0, 0, defaultFont);
 
+        snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
+        bar.drawCenterString(buffer, 130, 0, defaultFont);
+
         const double homeDistance = haversineDistance(homeLatitude, homeLongitude, currentLatitude, currentLongitude);
         snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
         bar.drawRightString(buffer, bar.width(), 0, defaultFont);
-
-        snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
-        bar.drawCenterString(buffer, 140, 0, defaultFont);
 
         break;
     }
@@ -148,9 +162,66 @@ void setup()
     showStatusBar(SHOW_STRING, str);
 }
 
+constexpr int32_t MENU_HEIGHT = 40;
+constexpr int32_t MENU_Y = 200;
+constexpr int32_t BUTTON_WIDTH = 106;
+
+constexpr int32_t BUTTON_X[] = {0, 107, 214};
+constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
+
+void drawButtons(LGFX_Device &dest)
+{
+    for (int i = 0; i < 3; i++)
+        dest.fillRect(BUTTON_X[i], MENU_Y, BUTTON_WIDTH, MENU_HEIGHT, BUTTON_COLORS[i]);
+}
+
+bool checkButtons(LGFX_Device &dest)
+{
+    uint16_t x, y;
+    if (!dest.getTouch(&x, &y) || y <= MENU_Y)
+        return false;
+
+    int buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1
+                                                                : 2;
+    int32_t buttonX = BUTTON_X[buttonIndex];
+    uint16_t color = BUTTON_COLORS[buttonIndex];
+
+    dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, color);
+
+    log_i("button %i pressed", buttonIndex);
+
+    switch (buttonIndex)
+    {
+    case 0:
+        break;
+    case 1:
+        // Show a dialog before committing to the update
+        if (gps.location.isValid())
+        {
+            homeLatitude = gps.location.lat();
+            homeLongitude = gps.location.lng();
+        }
+        else
+            log_w("GPS location not valid. Update skipped.");
+        break;
+    case 2:
+        break;
+    default:
+        log_e("out of range button %i pressed", buttonIndex);
+        break;
+    }
+
+    delay(5);
+
+    return true;
+}
+
 void loop()
 {
-    constexpr unsigned long gpsTimeoutThreshold = 1500;
+    if (checkButtons(display))
+        drawMap(currentLongitude, currentLatitude, zoom);
+
+    constexpr unsigned long gpsTimeoutThreshold = 2000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
@@ -177,7 +248,7 @@ void loop()
         lastUpdateMs = millis();
     }
 }
-
+/*
 bool waitForNewGPSLocation(unsigned long timeoutMs)
 {
     constexpr uint32_t STALETIME_MS = 5;
@@ -185,7 +256,7 @@ bool waitForNewGPSLocation(unsigned long timeoutMs)
     while (true)
     {
         while (hws.available() > 0)
-            if (gps.encode(hws.read()) && (gps.location.isValid() && gps.location.age() < STALETIME_MS))
+            if (gps.encode(hws.read()) && gps.location.isValid() && gps.location.age() < STALETIME_MS)
                 return true;
 
         if (millis() - startTime > timeoutMs)
@@ -194,3 +265,4 @@ bool waitForNewGPSLocation(unsigned long timeoutMs)
         vTaskDelay(pdMS_TO_TICKS(STALETIME_MS));
     }
 }
+*/
