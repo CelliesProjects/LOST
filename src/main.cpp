@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <WiFi.h>
-#include <OpenStreetMap-esp32.h>
+#include <esp_sntp.h>
 
+#include <OpenStreetMap-esp32.h>
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
 #include <TinyGPS++.h>
@@ -13,6 +14,11 @@ static const int RXPin = 13, TXPin = 14;
 static const uint32_t GPSBaud = 38400;
 static const GFXfont *statusBarFont = &DejaVu18;
 
+HardwareSerial hws(2);
+LGFX display;
+OpenStreetMap osm;
+TinyGPSPlus gps;
+
 enum statusBarType
 {
     SHOW_STATUS,
@@ -20,17 +26,9 @@ enum statusBarType
     SHOW_CLOCK
 };
 
-static statusBarType currentBarType = SHOW_STATUS;
-
-HardwareSerial hws(2);
-LGFX display;
-OpenStreetMap osm;
-TinyGPSPlus gps;
-
 static int zoom = 15;
-static double currentLatitude;
-static double currentLongitude;
 static LGFX_Sprite currentMap(&display);
+static statusBarType currentBarType = SHOW_STATUS;
 
 void drawMap(LGFX_Sprite &map)
 {
@@ -83,23 +81,38 @@ bool showStatusBar(statusBarType type, String &result)
     case SHOW_STATUS:
     {
         char buffer[30];
-        snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
-        bar.drawString(buffer, 0, 0);
 
-        snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
-        bar.drawCenterString(buffer, 130, 0);
+        if (gps.speed.isValid())
+        {
+            snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
+            bar.drawString(buffer, 0, 0);
+        }
 
-        const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, currentLatitude, currentLongitude);
-        snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
-        bar.drawRightString(buffer, bar.width(), 0);
+        if (gps.satellites.isValid())
+        {
+            snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
+            bar.drawCenterString(buffer, 130, 0);
+        }
+
+        if (gps.location.isValid())
+        {
+            const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, gps.location.lat(), gps.location.lng());
+            snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
+            bar.drawRightString(buffer, bar.width(), 0);
+        }
 
         break;
     }
     case SHOW_CLOCK:
     {
-        char time[16];
-        snprintf(time, sizeof(time), "%02i:%02i:%02i", gps.time.hour(), gps.time.minute(), gps.time.second());
-        bar.drawCenterString(time, bar.width() / 2, 0);
+        time_t now = time(NULL);
+        struct tm localTime;
+        localtime_r(&now, &localTime);
+
+        char timeBuffer[16];
+        snprintf(timeBuffer, sizeof(timeBuffer), "%02i:%02i:%02i", localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
+
+        bar.drawCenterString(timeBuffer, bar.width() / 2, 0);
         break;
     }
     default:
@@ -154,6 +167,8 @@ void setup()
     while (WiFi.status() != WL_CONNECTED)
         delay(5);
 
+    configTzTime(TIMEZONE, NTP_POOL);
+
     vTaskPrioritySet(NULL, 9);
 
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
@@ -163,7 +178,7 @@ void setup()
     showStatusBar(SHOW_STRING, str);
 }
 
-bool handleButtonPress(LGFX_Device &dest)
+bool handleTouchScreen(LGFX_Device &dest)
 {
     constexpr int32_t MENU_HEIGHT = 40;
     constexpr int32_t BUTTON_START_Y = 200;
@@ -179,7 +194,7 @@ bool handleButtonPress(LGFX_Device &dest)
     if (y < statusBarFont->yAdvance)
     {
         currentBarType = (currentBarType == SHOW_CLOCK) ? SHOW_STATUS : SHOW_CLOCK;
-        String str; 
+        String str;
         showStatusBar(currentBarType, str);
         delay(10);
         return false;
@@ -195,9 +210,10 @@ bool handleButtonPress(LGFX_Device &dest)
     int32_t textX = buttonX + (BUTTON_WIDTH / 2);
     int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
 
-    constexpr char *menu[] = {"Start", "Home", "Stop"};
     dest.setTextDatum(textdatum_t::middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
+
+    constexpr char *menu[] = {"Start", "Home", "Stop"};
     dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
 
     switch (buttonIndex)
@@ -205,9 +221,9 @@ bool handleButtonPress(LGFX_Device &dest)
     case 0:
         break;
     case 1:
-        // Show a dialog before committing to the update
         if (gps.location.isValid())
         {
+            // Show a dialog before committing to the update
             homeLatitude = gps.location.lat();
             homeLongitude = gps.location.lng();
         }
@@ -221,17 +237,17 @@ bool handleButtonPress(LGFX_Device &dest)
         break;
     }
 
-    delay(buttonIndex == 1 ? 50 : 300);
+    vTaskDelay(pdMS_TO_TICKS(150));
 
     return true;
 }
 
 void loop()
 {
-    if (handleButtonPress(display))
+    if (handleTouchScreen(display))
         drawMap(currentMap);
 
-    constexpr unsigned long gpsTimeoutThreshold = 3000;
+    constexpr unsigned long gpsTimeoutThreshold = 1000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
@@ -248,13 +264,10 @@ void loop()
     String str;
     showStatusBar(currentBarType, str);
 
-    currentLatitude = gps.location.lat();
-    currentLongitude = gps.location.lng();
-
     static unsigned long lastUpdateMs = 0;
-    if (millis() - lastUpdateMs > 750)
+    if (millis() - lastUpdateMs > 500)
     {
-        drawFreshMap(currentLongitude, currentLatitude, zoom);
+        drawFreshMap(gps.location.lng(), gps.location.lat(), zoom);
         lastUpdateMs = millis();
     }
 }
