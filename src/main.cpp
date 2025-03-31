@@ -81,25 +81,13 @@ bool showStatusBar(statusBarType type, String &result)
     case SHOW_STATUS:
     {
         char buffer[30];
-
-        if (gps.speed.isValid())
-        {
-            snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
-            bar.drawString(buffer, 0, 0);
-        }
-
-        if (gps.satellites.isValid())
-        {
-            snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
-            bar.drawCenterString(buffer, 130, 0);
-        }
-
-        if (gps.location.isValid())
-        {
-            const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, gps.location.lat(), gps.location.lng());
-            snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
-            bar.drawRightString(buffer, bar.width(), 0);
-        }
+        snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
+        bar.drawString(buffer, 0, 0);
+        snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
+        bar.drawCenterString(buffer, 130, 0);
+        const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, gps.location.lat(), gps.location.lng());
+        snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
+        bar.drawRightString(buffer, bar.width(), 0);
 
         break;
     }
@@ -125,28 +113,25 @@ bool showStatusBar(statusBarType type, String &result)
 
 void drawFreshMap(double longitude, double latitude, uint8_t zoom)
 {
-    const bool success = osm.fetchMap(currentMap, longitude, latitude, zoom);
-    if (success)
-    {
-        currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 10, TFT_DARKCYAN);
-        currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 6, TFT_DARKCYAN);
-        currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 3, TFT_BLACK);
-
-        static unsigned long initTimeMs = millis();
-        if (millis() - initTimeMs < 4000)
-        {
-            currentMap.drawCenterString("OSM tracker", currentMap.width() / 2, 30, statusBarFont);
-            currentMap.drawCenterString("0.99.2", currentMap.width() / 2, 70, statusBarFont);
-        }
-
-        currentMap.pushSprite(0, statusBarFont->yAdvance);
-    }
-    else
+    if (!osm.fetchMap(currentMap, longitude, latitude, zoom))
     {
         String error = "Failed to fetch map";
         showStatusBar(SHOW_STRING, error); // will be barely visible before overwritten
         log_e("%s", error.c_str());
+        return;
     }
+
+    currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 10, TFT_DARKCYAN);
+    currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 6, TFT_DARKCYAN);
+    currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 3, TFT_BLACK);
+
+    static unsigned long initTimeMs = millis();
+    if (millis() - initTimeMs < 4000)
+    {
+        currentMap.drawCenterString("OSM tracker", currentMap.width() / 2, 30, statusBarFont);
+        currentMap.drawCenterString("0.99.2", currentMap.width() / 2, 70, statusBarFont);
+    }
+    currentMap.pushSprite(0, statusBarFont->yAdvance);
 }
 
 void setup()
@@ -178,9 +163,38 @@ void setup()
     showStatusBar(SHOW_STRING, str);
 }
 
+bool confirm(LGFX_Device &dest, int32_t buttonIndex)
+{
+    constexpr int32_t MENU_HEIGHT = 80;
+    constexpr int32_t BUTTON_WIDTH = 106;
+    constexpr int32_t PROGRESS_DELAY = 600; // Total duration to confirm
+    constexpr uint16_t PROGRESS_COLOR = TFT_CYAN;
+    constexpr int32_t BUTTON_X[] = {0, 107, 214};
+
+    int32_t buttonX = BUTTON_X[buttonIndex];
+    uint16_t x, y;
+    uint32_t startTime = millis();
+    
+    while (millis() - startTime < PROGRESS_DELAY)
+    {
+        if (!dest.getTouch(&x, &y)) // Touch released early
+        {
+            dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE); // Erase progress
+            log_w("Action aborted");
+            return false;
+        }
+
+        int32_t progressHeight = (millis() - startTime) * MENU_HEIGHT / PROGRESS_DELAY;
+        dest.fillRect(buttonX, dest.height() - progressHeight, BUTTON_WIDTH, 2, PROGRESS_COLOR);
+        waitForNewGPSLocation(10);
+    }
+
+    return true; // Confirmation successful
+}
+
 bool handleTouchScreen(LGFX_Device &dest)
 {
-    constexpr int32_t MENU_HEIGHT = 40;
+    constexpr int32_t MENU_HEIGHT = 80;
     constexpr int32_t BUTTON_START_Y = 200;
     constexpr int32_t BUTTON_WIDTH = 106;
 
@@ -221,14 +235,11 @@ bool handleTouchScreen(LGFX_Device &dest)
     case 0:
         break;
     case 1:
-        if (gps.location.isValid())
+        if (gps.location.isValid() && confirm(display, buttonIndex))
         {
-            // Show a dialog before committing to the update
             homeLatitude = gps.location.lat();
             homeLongitude = gps.location.lng();
         }
-        else
-            log_w("GPS location not valid. Update skipped.");
         break;
     case 2:
         break;
@@ -237,7 +248,9 @@ bool handleTouchScreen(LGFX_Device &dest)
         break;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(pdMS_TO_TICKS(170));
+    dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+    vTaskDelay(pdMS_TO_TICKS(30));
 
     return true;
 }
@@ -247,7 +260,7 @@ void loop()
     if (handleTouchScreen(display))
         drawMap(currentMap);
 
-    constexpr unsigned long gpsTimeoutThreshold = 1000;
+    constexpr unsigned long gpsTimeoutThreshold = 2000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
