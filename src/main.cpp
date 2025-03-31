@@ -11,16 +11,33 @@
 
 static const int RXPin = 13, TXPin = 14;
 static const uint32_t GPSBaud = 38400;
-static const GFXfont *defaultFont = &DejaVu18;
+static const GFXfont *statusBarFont = &DejaVu18;
+
+enum statusBarType
+{
+    SHOW_STATUS,
+    SHOW_STRING,
+    SHOW_CLOCK
+};
+
+static statusBarType currentBarType = SHOW_STATUS;
 
 HardwareSerial hws(2);
 LGFX display;
 OpenStreetMap osm;
 TinyGPSPlus gps;
 
-int zoom = 15;
-double currentLatitude;
-double currentLongitude;
+static int zoom = 15;
+static double currentLatitude;
+static double currentLongitude;
+static LGFX_Sprite currentMap(&display);
+
+void drawMap(LGFX_Sprite &map)
+{
+    if (!map.getBuffer())
+        return;
+    map.pushSprite(0, statusBarFont->yAdvance);
+}
 
 bool waitForNewGPSLocation(unsigned long timeoutMs)
 {
@@ -39,26 +56,6 @@ bool waitForNewGPSLocation(unsigned long timeoutMs)
     }
 }
 
-double haversineDistance(double lat1, double lng1, double lat2, double lng2)
-{
-    constexpr double earthRadius = 6371000; // Earth radius in meters
-    double dLat = (lat2 - lat1) * PI / 180.0;
-    double dLng = (lng2 - lng1) * PI / 180.0;
-
-    double a = sin(dLat / 2) * sin(dLat / 2) +
-               cos(lat1 * PI / 180.0) * cos(lat2 * PI / 180.0) *
-                   sin(dLng / 2) * sin(dLng / 2);
-    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-
-    return earthRadius * c;
-}
-
-enum statusBarType
-{
-    SHOW_STATUS,
-    SHOW_STRING
-};
-
 bool showStatusBar(statusBarType type, String &result)
 {
     static LGFX_Sprite bar(&display);
@@ -67,8 +64,8 @@ bool showStatusBar(statusBarType type, String &result)
     {
         bar.setPsram(true);
         bar.deleteSprite();
-        bar.setFont(defaultFont);
-        bar.createSprite(display.width(), defaultFont->yAdvance);
+        bar.setFont(statusBarFont);
+        bar.createSprite(display.width(), statusBarFont->yAdvance);
         if (!bar.getBuffer())
         {
             result = "could not allocate statusbar";
@@ -87,15 +84,22 @@ bool showStatusBar(statusBarType type, String &result)
     {
         char buffer[30];
         snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
-        bar.drawString(buffer, 0, 0, defaultFont);
+        bar.drawString(buffer, 0, 0);
 
         snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
-        bar.drawCenterString(buffer, 130, 0, defaultFont);
+        bar.drawCenterString(buffer, 130, 0);
 
-        const double homeDistance = haversineDistance(homeLatitude, homeLongitude, currentLatitude, currentLongitude);
+        const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, currentLatitude, currentLongitude);
         snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
-        bar.drawRightString(buffer, bar.width(), 0, defaultFont);
+        bar.drawRightString(buffer, bar.width(), 0);
 
+        break;
+    }
+    case SHOW_CLOCK:
+    {
+        char time[16];
+        snprintf(time, sizeof(time), "%02i:%02i:%02i", gps.time.hour(), gps.time.minute(), gps.time.second());
+        bar.drawCenterString(time, bar.width() / 2, 0);
         break;
     }
     default:
@@ -106,24 +110,23 @@ bool showStatusBar(statusBarType type, String &result)
     return true;
 }
 
-void drawMap(double longitude, double latitude, uint8_t zoom)
+void drawFreshMap(double longitude, double latitude, uint8_t zoom)
 {
-    static unsigned long initTimeMs = millis();
-    static LGFX_Sprite map(&display);
-    const bool success = osm.fetchMap(map, longitude, latitude, zoom);
+    const bool success = osm.fetchMap(currentMap, longitude, latitude, zoom);
     if (success)
     {
-        map.drawCircle(map.width() / 2, map.height() / 2, 10, TFT_DARKCYAN);
-        map.drawCircle(map.width() / 2, map.height() / 2, 6, TFT_DARKCYAN);
-        map.drawCircle(map.width() / 2, map.height() / 2, 3, TFT_BLACK);
+        currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 10, TFT_DARKCYAN);
+        currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 6, TFT_DARKCYAN);
+        currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 3, TFT_BLACK);
 
+        static unsigned long initTimeMs = millis();
         if (millis() - initTimeMs < 4000)
         {
-            map.drawCenterString("OSM tracker", map.width() / 2, 30, defaultFont);
-            map.drawCenterString("0.99.2", map.width() / 2, 70, defaultFont);
+            currentMap.drawCenterString("OSM tracker", currentMap.width() / 2, 30, statusBarFont);
+            currentMap.drawCenterString("0.99.2", currentMap.width() / 2, 70, statusBarFont);
         }
 
-        map.pushSprite(0, defaultFont->yAdvance);
+        currentMap.pushSprite(0, statusBarFont->yAdvance);
     }
     else
     {
@@ -153,16 +156,15 @@ void setup()
 
     vTaskPrioritySet(NULL, 9);
 
-    osm.setSize(display.width(), display.height() - defaultFont->yAdvance);
+    osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
 
     str = "Waiting for location";
     showStatusBar(SHOW_STRING, str);
 }
 
-bool checkButtons(LGFX_Device &dest)
+bool handleButtonPress(LGFX_Device &dest)
 {
-
     constexpr int32_t MENU_HEIGHT = 40;
     constexpr int32_t BUTTON_START_Y = 200;
     constexpr int32_t BUTTON_WIDTH = 106;
@@ -171,8 +173,17 @@ bool checkButtons(LGFX_Device &dest)
     constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
 
     uint16_t x, y;
-    if (!dest.getTouch(&x, &y) || y <= BUTTON_START_Y)
+    if (!dest.getTouch(&x, &y) || (y <= BUTTON_START_Y && y >= statusBarFont->yAdvance))
         return false;
+
+    if (y < statusBarFont->yAdvance)
+    {
+        currentBarType = (currentBarType == SHOW_CLOCK) ? SHOW_STATUS : SHOW_CLOCK;
+        String str; 
+        showStatusBar(currentBarType, str);
+        delay(10);
+        return false;
+    }
 
     uint8_t buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1
                                                                     : 2;
@@ -184,7 +195,7 @@ bool checkButtons(LGFX_Device &dest)
     int32_t textX = buttonX + (BUTTON_WIDTH / 2);
     int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
 
-    const char *menu[] = {"Start", "Home", "Stop"};
+    constexpr char *menu[] = {"Start", "Home", "Stop"};
     dest.setTextDatum(textdatum_t::middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
     dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
@@ -217,10 +228,10 @@ bool checkButtons(LGFX_Device &dest)
 
 void loop()
 {
-    if (checkButtons(display))
-        drawMap(currentLongitude, currentLatitude, zoom);
+    if (handleButtonPress(display))
+        drawMap(currentMap);
 
-    constexpr unsigned long gpsTimeoutThreshold = 2000;
+    constexpr unsigned long gpsTimeoutThreshold = 3000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
@@ -235,7 +246,7 @@ void loop()
     lastGpsUpdate = millis();
 
     String str;
-    showStatusBar(SHOW_STATUS, str);
+    showStatusBar(currentBarType, str);
 
     currentLatitude = gps.location.lat();
     currentLongitude = gps.location.lng();
@@ -243,7 +254,7 @@ void loop()
     static unsigned long lastUpdateMs = 0;
     if (millis() - lastUpdateMs > 750)
     {
-        drawMap(currentLongitude, currentLatitude, zoom);
+        drawFreshMap(currentLongitude, currentLatitude, zoom);
         lastUpdateMs = millis();
     }
 }
