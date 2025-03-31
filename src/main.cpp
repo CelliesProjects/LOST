@@ -50,7 +50,7 @@ bool waitForNewGPSLocation(unsigned long timeoutMs)
         if (millis() - startTime > timeoutMs)
             return false;
 
-        vTaskDelay(pdMS_TO_TICKS(STALETIME_MS));
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
@@ -161,6 +161,9 @@ void setup()
 
     str = "Waiting for location";
     showStatusBar(SHOW_STRING, str);
+
+    while (!gps.location.isValid())
+        waitForNewGPSLocation(10);
 }
 
 bool confirm(LGFX_Device &dest, int32_t buttonIndex)
@@ -168,7 +171,7 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
     constexpr int32_t MENU_HEIGHT = 80;
     constexpr int32_t BUTTON_WIDTH = 106;
     constexpr int32_t PROGRESS_DELAY = 600; // Total duration to confirm
-    constexpr uint16_t PROGRESS_COLOR = TFT_CYAN;
+    constexpr uint16_t PROGRESS_COLOR = TFT_DARKGREEN;
     constexpr int32_t BUTTON_X[] = {0, 107, 214};
 
     int32_t buttonX = BUTTON_X[buttonIndex];
@@ -199,7 +202,7 @@ bool handleTouchScreen(LGFX_Device &dest)
     constexpr int32_t BUTTON_WIDTH = 106;
 
     constexpr int32_t BUTTON_X[] = {0, 107, 214};
-    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
+    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_BLUE, TFT_BLUE};
 
     uint16_t x, y;
     if (!dest.getTouch(&x, &y) || (y <= BUTTON_START_Y && y >= statusBarFont->yAdvance))
@@ -235,12 +238,22 @@ bool handleTouchScreen(LGFX_Device &dest)
     case 0:
         break;
     case 1:
-        if (gps.location.isValid() && confirm(display, buttonIndex))
-        {
-            homeLatitude = gps.location.lat();
-            homeLongitude = gps.location.lng();
-        }
+    {
+        if (!confirm(display, buttonIndex))
+            break;
+
+        while (!gps.location.isValid())
+            waitForNewGPSLocation(5);
+        homeLatitude = gps.location.lat();
+        homeLongitude = gps.location.lng();
+        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, color);
+        dest.drawString("SET!", textX, textY, &DejaVu24);
+        constexpr int32_t delay = 300;
+        unsigned long startMs = millis();
+        while (millis() - startMs < delay)
+            waitForNewGPSLocation(5);
         break;
+    }
     case 2:
         break;
     default:
