@@ -37,7 +37,7 @@ void drawMap(LGFX_Sprite &map)
     map.pushSprite(0, statusBarFont->yAdvance);
 }
 
-bool waitForNewGPSLocation(unsigned long timeoutMs = 0)
+bool waitForNewGPSLocation(unsigned long timeoutMs)
 {
     constexpr uint32_t STALETIME_MS = 5;
     const unsigned long startTime = millis();
@@ -128,7 +128,7 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
     static unsigned long initTimeMs = millis();
     if (millis() - initTimeMs < 4000)
     {
-        currentMap.drawCenterString("OSM tracker", currentMap.width() / 2, 30, statusBarFont);
+        currentMap.drawCenterString("GOSM", currentMap.width() / 2, 30, statusBarFont);
         currentMap.drawCenterString("0.99.2", currentMap.width() / 2, 70, statusBarFont);
     }
     currentMap.pushSprite(0, statusBarFont->yAdvance);
@@ -142,6 +142,8 @@ void setup()
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
 
     sdIsMounted = SD.begin(SDCARD_SS);
+
+    log_i("SD card %s", sdIsMounted ? "mounted": "failed");
 
     display.setRotation(0);
     display.setBrightness(110);
@@ -224,7 +226,7 @@ bool handleTouchScreen(LGFX_Device &dest)
         currentBarType = (currentBarType == SHOW_CLOCK) ? SHOW_STATUS : SHOW_CLOCK;
         String str;
         showStatusBar(currentBarType, str);
-        delay(10);
+        vTaskDelay(pdMS_TO_TICKS(40));
         return false;
     }
 
@@ -270,7 +272,8 @@ bool handleTouchScreen(LGFX_Device &dest)
         log_e("out of range button %i pressed", buttonIndex);
         break;
     }
-
+    String stub;
+    showStatusBar(currentBarType, stub);
     vTaskDelay(pdMS_TO_TICKS(500));
     return true;
 }
