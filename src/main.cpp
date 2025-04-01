@@ -161,48 +161,60 @@ void setup()
 
     str = "Waiting for location";
     showStatusBar(SHOW_STRING, str);
-
-    while (!gps.location.isValid())
-        waitForNewGPSLocation(10);
 }
 
 bool confirm(LGFX_Device &dest, int32_t buttonIndex)
 {
-    constexpr int32_t MENU_HEIGHT = 80;
+    constexpr int32_t MENU_HEIGHT = 120;
     constexpr int32_t BUTTON_WIDTH = 106;
     constexpr int32_t PROGRESS_DELAY = 600; // Total duration to confirm
     constexpr uint16_t PROGRESS_COLOR = TFT_DARKGREEN;
     constexpr int32_t BUTTON_X[] = {0, 107, 214};
+    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_BLUE, TFT_BLUE};
 
     int32_t buttonX = BUTTON_X[buttonIndex];
     uint16_t x, y;
     uint32_t startTime = millis();
-    
+
+    int32_t textX = buttonX + (BUTTON_WIDTH / 2);
+    int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
+
     while (millis() - startTime < PROGRESS_DELAY)
     {
-        if (!dest.getTouch(&x, &y)) // Touch released early
+        if (!dest.getTouch(&x, &y))
         {
-            dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE); // Erase progress
+            constexpr char *menu[] = {"Cancel", "Cancel", "Cancel"};
+            dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+            dest.setTextColor(TFT_BLACK, TFT_WHITE);
+            dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
             log_w("Action aborted");
             return false;
         }
 
         int32_t progressHeight = (millis() - startTime) * MENU_HEIGHT / PROGRESS_DELAY;
         dest.fillRect(buttonX, dest.height() - progressHeight, BUTTON_WIDTH, 2, PROGRESS_COLOR);
-        waitForNewGPSLocation(10);
+
+        if (currentBarType == SHOW_CLOCK)
+        {
+            String stub;
+            showStatusBar(currentBarType, stub);
+        }
     }
 
-    return true; // Confirmation successful
+    while (!gps.location.isUpdated())
+        waitForNewGPSLocation(10);
+
+    return true;
 }
 
 bool handleTouchScreen(LGFX_Device &dest)
 {
-    constexpr int32_t MENU_HEIGHT = 80;
+    constexpr int32_t MENU_HEIGHT = 120;
     constexpr int32_t BUTTON_START_Y = 200;
     constexpr int32_t BUTTON_WIDTH = 106;
 
     constexpr int32_t BUTTON_X[] = {0, 107, 214};
-    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_BLUE, TFT_BLUE};
+    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
 
     uint16_t x, y;
     if (!dest.getTouch(&x, &y) || (y <= BUTTON_START_Y && y >= statusBarFont->yAdvance))
@@ -230,32 +242,61 @@ bool handleTouchScreen(LGFX_Device &dest)
     dest.setTextDatum(textdatum_t::middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
 
-    constexpr char *menu[] = {"Start", "Home", "Stop"};
+    constexpr char *menu[] = {"Track", "Home", "Stop"};
     dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
 
     switch (buttonIndex)
     {
     case 0:
-        break;
-    case 1:
     {
         if (!confirm(display, buttonIndex))
             break;
 
-        while (!gps.location.isValid())
-            waitForNewGPSLocation(5);
-        homeLatitude = gps.location.lat();
-        homeLongitude = gps.location.lng();
-        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, color);
-        dest.drawString("SET!", textX, textY, &DejaVu24);
+        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+        dest.setTextColor(TFT_BLACK, TFT_WHITE);
+        dest.drawString("Stub!", textX, textY, &DejaVu24);
         constexpr int32_t delay = 300;
         unsigned long startMs = millis();
         while (millis() - startMs < delay)
             waitForNewGPSLocation(5);
         break;
     }
-    case 2:
+    case 1:
+    {
+        if (!confirm(display, buttonIndex))
+            break;
+
+        while (!gps.location.isUpdated())
+            waitForNewGPSLocation(5);
+        homeLatitude = gps.location.lat();
+        homeLongitude = gps.location.lng();
+        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+        dest.setTextColor(TFT_BLACK, TFT_WHITE);
+        dest.drawString("Set!", textX, textY, &DejaVu24);
+        constexpr int32_t delay = 300;
+        unsigned long startMs = millis();
+        while (millis() - startMs < delay)
+            waitForNewGPSLocation(5);
+
+        while (!gps.location.isUpdated() || !gps.location.isValid())
+            waitForNewGPSLocation(5);
+
         break;
+    }
+    case 2:
+    {
+        if (!confirm(display, buttonIndex))
+            break;
+
+        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+        dest.setTextColor(TFT_BLACK, TFT_WHITE);
+        dest.drawString("Stub!", textX, textY, &DejaVu24);
+        constexpr int32_t delay = 300;
+        unsigned long startMs = millis();
+        while (millis() - startMs < delay)
+            waitForNewGPSLocation(5);
+        break;
+    }
     default:
         log_e("out of range button %i pressed", buttonIndex);
         break;
