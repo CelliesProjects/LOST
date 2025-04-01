@@ -168,15 +168,16 @@ void setup()
     showStatusBar(SHOW_STRING, str);
 }
 
+constexpr int32_t MENU_HEIGHT = 120;
+constexpr int32_t BUTTON_WIDTH = 106;
+constexpr int32_t BUTTON_START_Y = 200;
+constexpr int32_t CONFIRM_DURATION_MS = 600;
+constexpr uint16_t PROGRESS_COLOR = TFT_DARKGREEN;
+constexpr int32_t BUTTON_X[] = {0, 107, 214};
+constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
+
 bool confirm(LGFX_Device &dest, int32_t buttonIndex)
 {
-    constexpr int32_t MENU_HEIGHT = 120;
-    constexpr int32_t BUTTON_WIDTH = 106;
-    constexpr int32_t PROGRESS_DELAY = 600; // Total duration to confirm
-    constexpr uint16_t PROGRESS_COLOR = TFT_DARKGREEN;
-    constexpr int32_t BUTTON_X[] = {0, 107, 214};
-    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_BLUE, TFT_BLUE};
-
     int32_t buttonX = BUTTON_X[buttonIndex];
     uint16_t x, y;
     uint32_t startTime = millis();
@@ -184,7 +185,7 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
     int32_t textX = buttonX + (BUTTON_WIDTH / 2);
     int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
 
-    while (millis() - startTime < PROGRESS_DELAY)
+    while (millis() - startTime < CONFIRM_DURATION_MS)
     {
         if (!dest.getTouch(&x, &y))
         {
@@ -195,7 +196,7 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
             return false;
         }
 
-        int32_t progressHeight = (millis() - startTime) * MENU_HEIGHT / PROGRESS_DELAY;
+        int32_t progressHeight = (millis() - startTime) * MENU_HEIGHT / CONFIRM_DURATION_MS;
         dest.fillRect(buttonX, dest.height() - progressHeight, BUTTON_WIDTH, 2, PROGRESS_COLOR);
 
         if (currentBarType != SHOW_STRING)
@@ -210,13 +211,6 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
 
 bool handleTouchScreen(LGFX_Device &dest)
 {
-    constexpr int32_t MENU_HEIGHT = 120;
-    constexpr int32_t BUTTON_START_Y = 200;
-    constexpr int32_t BUTTON_WIDTH = 106;
-
-    constexpr int32_t BUTTON_X[] = {0, 107, 214};
-    constexpr uint16_t BUTTON_COLORS[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
-
     uint16_t x, y;
     if (!dest.getTouch(&x, &y) || (y <= BUTTON_START_Y && y >= statusBarFont->yAdvance))
         return false;
