@@ -263,11 +263,11 @@ bool handleTouchScreen(LGFX_Device &dest)
         dest.drawString("Stub!", textX, textY, &DejaVu24);
         break;
     default:
-        log_e("out of range button %i pressed", buttonIndex);
+        log_e("out of range button %i pressed?", buttonIndex);
         break;
     }
-    String stub;
-    showStatusBar(currentBarType, stub);
+    String dummy;
+    showStatusBar(currentBarType, dummy);
     vTaskDelay(pdMS_TO_TICKS(500));
     return true;
 }
