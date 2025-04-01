@@ -37,7 +37,7 @@ void drawMap(LGFX_Sprite &map)
     map.pushSprite(0, statusBarFont->yAdvance);
 }
 
-bool waitForNewGPSLocation(unsigned long timeoutMs)
+bool waitForNewGPSLocation(unsigned long timeoutMs = 0)
 {
     constexpr uint32_t STALETIME_MS = 5;
     const unsigned long startTime = millis();
@@ -47,7 +47,7 @@ bool waitForNewGPSLocation(unsigned long timeoutMs)
             if (gps.encode(hws.read()) && gps.location.isValid() && gps.location.age() < STALETIME_MS)
                 return true;
 
-        if (millis() - startTime > timeoutMs)
+        if (timeoutMs && millis() - startTime > timeoutMs)
             return false;
 
         vTaskDelay(pdMS_TO_TICKS(2));
@@ -201,9 +201,7 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
         }
     }
 
-    while (!gps.location.isUpdated())
-        waitForNewGPSLocation(10);
-
+    waitForNewGPSLocation();
     return true;
 }
 
@@ -258,7 +256,7 @@ bool handleTouchScreen(LGFX_Device &dest)
         constexpr int32_t delay = 300;
         unsigned long startMs = millis();
         while (millis() - startMs < delay)
-            waitForNewGPSLocation(5);
+            waitForNewGPSLocation(10);
         break;
     }
     case 1:
@@ -266,8 +264,8 @@ bool handleTouchScreen(LGFX_Device &dest)
         if (!confirm(display, buttonIndex))
             break;
 
-        while (!gps.location.isUpdated())
-            waitForNewGPSLocation(5);
+        waitForNewGPSLocation();
+
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
         dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
@@ -276,10 +274,16 @@ bool handleTouchScreen(LGFX_Device &dest)
         constexpr int32_t delay = 300;
         unsigned long startMs = millis();
         while (millis() - startMs < delay)
+        {
             waitForNewGPSLocation(5);
+            if (currentBarType == SHOW_CLOCK || (gps.location.isUpdated() && gps.location.isValid()))
+            {
+                String stub;
+                showStatusBar(currentBarType, stub);
+            }
+        }
 
-        while (!gps.location.isUpdated() || !gps.location.isValid())
-            waitForNewGPSLocation(5);
+        waitForNewGPSLocation();
 
         break;
     }
