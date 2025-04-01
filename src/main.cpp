@@ -128,8 +128,10 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
     static unsigned long initTimeMs = millis();
     if (millis() - initTimeMs < 4000)
     {
-        currentMap.drawCenterString("GOSM", currentMap.width() / 2, 30, statusBarFont);
-        currentMap.drawCenterString("0.99.2", currentMap.width() / 2, 70, statusBarFont);
+        currentMap.setTextColor(TFT_BLACK);
+        currentMap.drawCenterString("LOST", currentMap.width() / 2, 30, &DejaVu72);
+        currentMap.drawCenterString("LGFX OSM TinyGPS", currentMap.width() / 2, 110, statusBarFont);
+        currentMap.drawCenterString(GIT_VERSION, currentMap.width() / 2, 140, statusBarFont);
     }
     currentMap.pushSprite(0, statusBarFont->yAdvance);
 }
