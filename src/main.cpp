@@ -190,7 +190,6 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
             dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
             dest.setTextColor(TFT_BLACK, TFT_WHITE);
             dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
-            log_w("Action aborted");
             return false;
         }
 
@@ -247,7 +246,7 @@ bool handleTouchScreen(LGFX_Device &dest)
 
     if (!confirm(display, buttonIndex))
     {
-        vTaskDelay(pdMS_TO_TICKS(60));
+        vTaskDelay(pdMS_TO_TICKS(300));
         return true;
     }
 
@@ -272,9 +271,7 @@ bool handleTouchScreen(LGFX_Device &dest)
         break;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(170));
-    dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
-    vTaskDelay(pdMS_TO_TICKS(30));
+    vTaskDelay(pdMS_TO_TICKS(500));
     return true;
 }
 
