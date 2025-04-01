@@ -133,12 +133,15 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
     }
     currentMap.pushSprite(0, statusBarFont->yAdvance);
 }
+static bool sdIsMounted = false;
 
 void setup()
 {
     Serial.begin(115200);
 
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
+
+    sdIsMounted = SD.begin(SDCARD_SS);
 
     display.setRotation(0);
     display.setBrightness(110);
@@ -194,14 +197,13 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
         int32_t progressHeight = (millis() - startTime) * MENU_HEIGHT / PROGRESS_DELAY;
         dest.fillRect(buttonX, dest.height() - progressHeight, BUTTON_WIDTH, 2, PROGRESS_COLOR);
 
-        if (currentBarType == SHOW_CLOCK)
+        if (currentBarType != SHOW_STRING)
         {
             String stub;
             showStatusBar(currentBarType, stub);
         }
     }
 
-    waitForNewGPSLocation();
     return true;
 }
 
@@ -243,64 +245,28 @@ bool handleTouchScreen(LGFX_Device &dest)
     constexpr char *menu[] = {"Track", "Home", "Stop"};
     dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
 
+    if (!confirm(display, buttonIndex))
+    {
+        vTaskDelay(pdMS_TO_TICKS(60));
+        return true;
+    }
+
+    dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+    dest.setTextColor(TFT_BLACK, TFT_WHITE);
+
     switch (buttonIndex)
     {
     case 0:
-    {
-        if (!confirm(display, buttonIndex))
-            break;
-
-        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
-        dest.setTextColor(TFT_BLACK, TFT_WHITE);
         dest.drawString("Stub!", textX, textY, &DejaVu24);
-        constexpr int32_t delay = 300;
-        unsigned long startMs = millis();
-        while (millis() - startMs < delay)
-            waitForNewGPSLocation(10);
         break;
-    }
     case 1:
-    {
-        if (!confirm(display, buttonIndex))
-            break;
-
-        waitForNewGPSLocation();
-
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
-        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
-        dest.setTextColor(TFT_BLACK, TFT_WHITE);
         dest.drawString("Set!", textX, textY, &DejaVu24);
-        constexpr int32_t delay = 300;
-        unsigned long startMs = millis();
-        while (millis() - startMs < delay)
-        {
-            waitForNewGPSLocation(5);
-            if (currentBarType == SHOW_CLOCK || (gps.location.isUpdated() && gps.location.isValid()))
-            {
-                String stub;
-                showStatusBar(currentBarType, stub);
-            }
-        }
-
-        waitForNewGPSLocation();
-
         break;
-    }
     case 2:
-    {
-        if (!confirm(display, buttonIndex))
-            break;
-
-        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
-        dest.setTextColor(TFT_BLACK, TFT_WHITE);
         dest.drawString("Stub!", textX, textY, &DejaVu24);
-        constexpr int32_t delay = 300;
-        unsigned long startMs = millis();
-        while (millis() - startMs < delay)
-            waitForNewGPSLocation(5);
         break;
-    }
     default:
         log_e("out of range button %i pressed", buttonIndex);
         break;
@@ -309,7 +275,6 @@ bool handleTouchScreen(LGFX_Device &dest)
     vTaskDelay(pdMS_TO_TICKS(170));
     dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
     vTaskDelay(pdMS_TO_TICKS(30));
-
     return true;
 }
 
@@ -318,7 +283,7 @@ void loop()
     if (handleTouchScreen(display))
         drawMap(currentMap);
 
-    constexpr unsigned long gpsTimeoutThreshold = 2000;
+    constexpr unsigned long gpsTimeoutThreshold = 3000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
