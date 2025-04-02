@@ -3,7 +3,6 @@
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <esp_sntp.h>
-#include <esp32-hal-ledc.h>
 
 #include <OpenStreetMap-esp32.h>
 #include <LGFX_AUTODETECT.hpp>
@@ -38,19 +37,6 @@ static bool isRecording = false;
 
 int selectedNetwork = -1;
 
-void drawNetworkList(std::vector<NetworkDetails> &networks)
-{
-    display.fillScreen(TFT_BLACK);
-    display.setCursor(10, 10);
-    display.println("Select Network:");
-    for (size_t i = 0; i < networks.size(); i++)
-    {
-        log_i("drawing %s", networks[i].ssid.c_str());
-        display.setTextColor(TFT_WHITE);
-        display.drawCenterString(networks[i].ssid, display.width() / 2, i * 30, &DejaVu24);
-    }
-}
-
 bool connectToNetwork(const String &ssid)
 {
     for (const auto &net : knownNetworks)
@@ -80,18 +66,50 @@ bool connectToNetwork(const String &ssid)
     return false;
 }
 
-void checkTouch(std::vector<NetworkDetails> &connectableNetworks)
+void drawNetworkList(std::vector<NetworkDetails> &networks)
+{
+    display.fillScreen(TFT_BLACK);
+    display.setCursor(10, 10);
+    display.drawCenterString("Select Network:", display.width() / 2, 0, &DejaVu18);
+
+    int rectHeight = 60;
+    int spacing = 10;
+    int startY = 30;
+
+    for (size_t i = 0; i < networks.size(); i++)
+    {
+        int yPos = startY + i * (rectHeight + spacing);
+        log_i("drawing %s", networks[i].ssid.c_str());
+        display.drawRect(0, yPos, display.width(), rectHeight, TFT_WHITE);
+        display.setTextColor(TFT_WHITE);
+        display.drawCenterString(networks[i].ssid, display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
+    }
+}
+
+void checkTouch(std::vector<NetworkDetails> &networks)
 {
     uint16_t x, y;
     if (display.getTouch(&x, &y))
     {
-        for (size_t i = 0; i < connectableNetworks.size(); i++)
+        int rectHeight = 60;
+        int spacing = 10;
+        int startY = 30;
+
+        for (size_t i = 0; i < networks.size(); i++)
         {
-            if (y > 30 + i * 20 && y < 50 + i * 20)
+            int yPos = startY + i * (rectHeight + spacing);
+            if (y > yPos && y < yPos + rectHeight)
             {
+                display.fillRect(0, yPos, display.width(), rectHeight, TFT_DARKCYAN);
+                display.setTextColor(TFT_WHITE, TFT_DARKCYAN);
+                display.drawCenterString(networks[i].ssid, display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
+
+                display.setTextColor(TFT_WHITE, TFT_BLACK);
+                display.fillRect(0, display.height() - 30, display.width(), 30, TFT_BLACK);
+                display.drawCenterString("Connecting...", display.width() / 2, display.height() - 25, &DejaVu24);
                 selectedNetwork = i;
-                connectToNetwork(connectableNetworks[i].ssid);
-                break;
+                connectToNetwork(networks[i].ssid);
+                return;
             }
         }
     }
@@ -107,7 +125,7 @@ bool isKnownNetwork(const String &ssid)
     return false;
 }
 
-void scanNetworks()
+void selectNetwork()
 {
     display.fillScreen(TFT_BLACK);
     int numNetworks = WiFi.scanNetworks();
@@ -271,7 +289,7 @@ void setup()
     showStatusBar(SHOW_STRING, str);
 
     WiFi.mode(WIFI_STA);
-    scanNetworks();
+    selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
 
     vTaskPrioritySet(NULL, 9);
