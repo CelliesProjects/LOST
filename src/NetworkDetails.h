@@ -5,11 +5,12 @@
 
 struct NetworkDetails
 {
-    String ssid;
-    String password;
+    const char *ssid;
+    const char *password;
 
-    NetworkDetails() = default;
-    NetworkDetails(const char* s, const char* p) : ssid(s), password(p) {}
+    constexpr NetworkDetails(const char *s, const char *p) : ssid(s), password(p) {}
+
+    NetworkDetails() = delete;
 };
 
 #endif
