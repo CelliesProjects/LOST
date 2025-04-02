@@ -11,6 +11,7 @@
 #include <TinyGPS++.h>
 
 #include "secrets.h"
+#include "NetworkDetails.h"
 
 static const int RXPin = 13, TXPin = 14;
 static const uint32_t GPSBaud = 38400;
@@ -34,6 +35,117 @@ static LGFX_Sprite currentMap(&display);
 static statusBarType currentBarType = SHOW_STATUS;
 static bool sdIsMounted = false;
 static bool isRecording = false;
+
+int selectedNetwork = -1;
+
+void drawNetworkList(std::vector<NetworkDetails> &networks)
+{
+    display.fillScreen(TFT_BLACK);
+    display.setCursor(10, 10);
+    display.println("Select Network:");
+    for (size_t i = 0; i < networks.size(); i++)
+    {
+        log_i("drawing %s", networks[i].ssid.c_str());
+        display.setTextColor(TFT_WHITE);
+        display.drawCenterString(networks[i].ssid, display.width() / 2, i * 30, &DejaVu24);
+    }
+}
+
+bool connectToNetwork(const String &ssid)
+{
+    for (const auto &net : knownNetworks)
+    {
+        if (ssid == net.ssid)
+        {
+            WiFi.begin(net.ssid.c_str(), net.password.c_str());
+            log_i("Connecting to %s...", net.ssid.c_str());
+
+            unsigned long startAttemptTime = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000)
+            {
+                delay(500);
+                log_i(".");
+            }
+
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                log_i("Connected! IP: %s", WiFi.localIP().toString().c_str());
+                return true;
+            }
+            log_i("Connection failed.");
+            return false;
+        }
+    }
+    log_i("Selected network is not in the known list.");
+    return false;
+}
+
+void checkTouch(std::vector<NetworkDetails> &connectableNetworks)
+{
+    uint16_t x, y;
+    if (display.getTouch(&x, &y))
+    {
+        for (size_t i = 0; i < connectableNetworks.size(); i++)
+        {
+            if (y > 30 + i * 20 && y < 50 + i * 20)
+            {
+                selectedNetwork = i;
+                connectToNetwork(connectableNetworks[i].ssid);
+                break;
+            }
+        }
+    }
+}
+
+bool isKnownNetwork(const String &ssid)
+{
+    for (const auto &net : knownNetworks)
+    {
+        if (ssid == net.ssid)
+            return true;
+    }
+    return false;
+}
+
+void scanNetworks()
+{
+    display.fillScreen(TFT_BLACK);
+    int numNetworks = WiFi.scanNetworks();
+    std::vector<String> availableNetworks;
+
+    for (int i = 0; i < numNetworks; i++)
+    {
+        String ssid = WiFi.SSID(i);
+        log_v("current: %s", ssid.c_str());
+        if (isKnownNetwork(ssid))
+        {
+            availableNetworks.push_back(ssid);
+            log_i("adding %s", ssid.c_str());
+        }
+    }
+
+    if (availableNetworks.empty())
+    {
+        display.fillScreen(TFT_BLACK);
+        display.setCursor(10, 10);
+        display.println("No Known Networks");
+        return;
+    }
+
+    std::vector<NetworkDetails> connectableNetworks;
+    for (const auto &ssid : availableNetworks)
+    {
+        for (const auto &net : knownNetworks)
+        {
+            if (ssid == net.ssid)
+                connectableNetworks.push_back(net);
+        }
+    }
+
+    drawNetworkList(connectableNetworks);
+    while (selectedNetwork == -1)
+        checkTouch(connectableNetworks);
+}
 
 void drawMap(LGFX_Sprite &map)
 {
@@ -158,13 +270,8 @@ void setup()
     String str = "Connecting WiFi";
     showStatusBar(SHOW_STRING, str);
 
-    wifiMulti.addAP(ssid, password);
-    wifiMulti.addAP(ssid2, password2);
-
-    WiFi.setSleep(false);
-    while (wifiMulti.run() != WL_CONNECTED)
-        delay(5);
-
+    WiFi.mode(WIFI_STA);
+    scanNetworks();
     configTzTime(TIMEZONE, NTP_POOL);
 
     vTaskPrioritySet(NULL, 9);
