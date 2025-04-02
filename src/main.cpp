@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <esp_sntp.h>
+#include <esp32-hal-ledc.h>
 
 #include <OpenStreetMap-esp32.h>
 #include <LGFX_AUTODETECT.hpp>
@@ -18,6 +20,7 @@ HardwareSerial hws(2);
 LGFX display;
 OpenStreetMap osm;
 TinyGPSPlus gps;
+WiFiMulti wifiMulti;
 
 enum statusBarType
 {
@@ -29,6 +32,8 @@ enum statusBarType
 static int zoom = 15;
 static LGFX_Sprite currentMap(&display);
 static statusBarType currentBarType = SHOW_STATUS;
+static bool sdIsMounted = false;
+static bool isRecording = false;
 
 void drawMap(LGFX_Sprite &map)
 {
@@ -135,7 +140,6 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
     }
     currentMap.pushSprite(0, statusBarFont->yAdvance);
 }
-static bool sdIsMounted = false;
 
 void setup()
 {
@@ -145,7 +149,7 @@ void setup()
 
     sdIsMounted = SD.begin(SDCARD_SS);
 
-    log_i("SD card %s", sdIsMounted ? "mounted": "failed");
+    log_i("SD card %s", sdIsMounted ? "mounted" : "failed");
 
     display.setRotation(0);
     display.setBrightness(110);
@@ -154,9 +158,11 @@ void setup()
     String str = "Connecting WiFi";
     showStatusBar(SHOW_STRING, str);
 
+    wifiMulti.addAP(ssid, password);
+    wifiMulti.addAP(ssid2, password2);
+
     WiFi.setSleep(false);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
+    while (wifiMulti.run() != WL_CONNECTED)
         delay(5);
 
     configTzTime(TIMEZONE, NTP_POOL);
@@ -239,8 +245,16 @@ bool handleTouchScreen(LGFX_Device &dest)
     dest.setTextDatum(textdatum_t::middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
 
-    constexpr char *menu[] = {"Track", "Home", "Stop"};
-    dest.drawString(menu[buttonIndex], textX, textY, &DejaVu24);
+    // determine how to handle the start and stop button
+    // if (!sdIsMounted)
+    //    sdIsMounted = SD.begin(SDCARD_SS);
+    char startBtnTxt[10];
+    snprintf(startBtnTxt, sizeof(startBtnTxt), "%s", sdIsMounted ? "Start" : "NO SD");
+
+    const char *line1[] = {startBtnTxt, "Set", startBtnTxt};
+    const char *line2[] = {"", "Home", ""};
+    dest.drawString(line1[buttonIndex], textX, textY - 20, &DejaVu24);
+    dest.drawString(line2[buttonIndex], textX, textY + 20, &DejaVu24);
 
     if (!confirm(display, buttonIndex))
     {
@@ -257,9 +271,16 @@ bool handleTouchScreen(LGFX_Device &dest)
         dest.drawString("Stub!", textX, textY, &DejaVu24);
         break;
     case 1:
+        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
+        dest.drawString("Saving", textX, textY, &DejaVu24);
+        // beep();
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
-        dest.drawString("Set!", textX, textY, &DejaVu24);
+        vTaskDelay(pdMS_TO_TICKS(160));
+        dest.setTextColor(TFT_BLACK, TFT_GREEN);
+        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_GREEN);
+        dest.drawString("Home", textX, textY - 20, &DejaVu24);
+        dest.drawString("Set", textX, textY + 20, &DejaVu24);
         break;
     case 2:
         dest.drawString("Stub!", textX, textY, &DejaVu24);
@@ -270,7 +291,7 @@ bool handleTouchScreen(LGFX_Device &dest)
     }
     String dummy;
     showStatusBar(currentBarType, dummy);
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(800));
     return true;
 }
 
