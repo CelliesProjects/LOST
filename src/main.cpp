@@ -4,9 +4,9 @@
 #include <WiFiMulti.h>
 #include <esp_sntp.h>
 
-#include <OpenStreetMap-esp32.h>
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
+#include <OpenStreetMap-esp32.h>
 #include <TinyGPS++.h>
 
 #include "secrets.h"
@@ -35,16 +35,14 @@ static statusBarType currentBarType = SHOW_STATUS;
 static bool sdIsMounted = false;
 static bool isRecording = false;
 
-int selectedNetwork = -1;
-
 bool connectToNetwork(const String &ssid)
 {
     for (const auto &net : knownNetworks)
     {
         if (ssid == net.ssid)
         {
-            WiFi.begin(net.ssid.c_str(), net.password.c_str());
-            log_i("Connecting to %s...", net.ssid.c_str());
+            WiFi.begin(net.ssid, net.password);
+            log_i("Connecting to %s...", net.ssid);
 
             unsigned long startAttemptTime = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000)
@@ -76,14 +74,13 @@ void drawNetworkList(std::vector<NetworkDetails> &networks)
     for (size_t i = 0; i < networks.size(); i++)
     {
         int yPos = startY + i * (rectHeight + spacing);
-        log_i("drawing %s", networks[i].ssid.c_str());
         display.drawRect(0, yPos, display.width(), rectHeight, TFT_WHITE);
         display.setTextColor(TFT_WHITE);
         display.drawCenterString(networks[i].ssid, display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
     }
 }
 
-void checkTouch(std::vector<NetworkDetails> &networks)
+void checkTouch(std::vector<NetworkDetails> &networks, int32_t &network)
 {
     uint16_t x, y;
     if (display.getTouch(&x, &y))
@@ -103,7 +100,7 @@ void checkTouch(std::vector<NetworkDetails> &networks)
 
                 display.setTextColor(TFT_WHITE, TFT_BLACK);
                 display.drawCenterString("Connecting...", display.width() / 2, display.height() - 25, &DejaVu24);
-                selectedNetwork = i;
+                network = i;
                 connectToNetwork(networks[i].ssid);
                 return;
             }
@@ -123,10 +120,8 @@ bool isKnownNetwork(const String &ssid)
 
 void selectNetwork()
 {
-    display.fillScreen(TFT_BLACK);
     int numNetworks = WiFi.scanNetworks();
     std::vector<String> availableNetworks;
-
     for (int i = 0; i < numNetworks; i++)
     {
         String ssid = WiFi.SSID(i);
@@ -158,8 +153,9 @@ void selectNetwork()
     }
 
     drawNetworkList(connectableNetworks);
+    int32_t selectedNetwork = -1;
     while (selectedNetwork == -1)
-        checkTouch(connectableNetworks);
+        checkTouch(connectableNetworks, selectedNetwork);
 }
 
 void drawMap(LGFX_Sprite &map)
