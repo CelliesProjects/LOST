@@ -48,10 +48,7 @@ bool connectToNetwork(const String &ssid)
 
             unsigned long startAttemptTime = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000)
-            {
-                delay(500);
-                log_i(".");
-            }
+                vTaskDelay(pdMS_TO_TICKS(5));
 
             if (WiFi.status() == WL_CONNECTED)
             {
@@ -97,7 +94,7 @@ void checkTouch(std::vector<NetworkDetails> &networks)
 
         for (size_t i = 0; i < networks.size(); i++)
         {
-            int yPos = startY + i * (rectHeight + spacing);
+            const int yPos = startY + i * (rectHeight + spacing);
             if (y > yPos && y < yPos + rectHeight)
             {
                 display.fillRect(0, yPos, display.width(), rectHeight, TFT_DARKCYAN);
@@ -105,7 +102,6 @@ void checkTouch(std::vector<NetworkDetails> &networks)
                 display.drawCenterString(networks[i].ssid, display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
 
                 display.setTextColor(TFT_WHITE, TFT_BLACK);
-                display.fillRect(0, display.height() - 30, display.width(), 30, TFT_BLACK);
                 display.drawCenterString("Connecting...", display.width() / 2, display.height() - 25, &DejaVu24);
                 selectedNetwork = i;
                 connectToNetwork(networks[i].ssid);
@@ -134,12 +130,8 @@ void selectNetwork()
     for (int i = 0; i < numNetworks; i++)
     {
         String ssid = WiFi.SSID(i);
-        log_v("current: %s", ssid.c_str());
         if (isKnownNetwork(ssid))
-        {
             availableNetworks.push_back(ssid);
-            log_i("adding %s", ssid.c_str());
-        }
     }
 
     if (availableNetworks.empty())
@@ -158,6 +150,11 @@ void selectNetwork()
             if (ssid == net.ssid)
                 connectableNetworks.push_back(net);
         }
+    }
+    if (connectableNetworks.size() == 1)
+    {
+        connectToNetwork(connectableNetworks.begin()->ssid);
+        return;
     }
 
     drawNetworkList(connectableNetworks);
