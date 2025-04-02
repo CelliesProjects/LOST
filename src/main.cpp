@@ -132,9 +132,9 @@ void selectNetwork()
     if (availableNetworks.empty())
     {
         display.fillScreen(TFT_BLACK);
-        display.setCursor(10, 10);
-        display.println("No Known Networks");
-        return;
+        display.drawCenterString("No Networks", display.width() / 2, display.height() / 2, &DejaVu40);
+        while (1)
+            delay(100);
     }
 
     std::vector<NetworkDetails> connectableNetworks;
@@ -146,9 +146,19 @@ void selectNetwork()
                 connectableNetworks.push_back(net);
         }
     }
+
+    if (connectableNetworks.empty())
+    {
+        display.fillScreen(TFT_BLACK);
+        display.drawCenterString("No Known Networks", display.width() / 2, display.height() / 2, &DejaVu40);
+        while (1)
+            delay(100);
+    }    
+
     if (connectableNetworks.size() == 1)
     {
         connectToNetwork(connectableNetworks.begin()->ssid);
+        // TODO: check if we actually connected
         return;
     }
 
@@ -156,6 +166,8 @@ void selectNetwork()
     int32_t selectedNetwork = -1;
     while (selectedNetwork == -1)
         checkTouch(connectableNetworks, selectedNetwork);
+
+    // TODO: check if we actually connected
 }
 
 void drawMap(LGFX_Sprite &map)
