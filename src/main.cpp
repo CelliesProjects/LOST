@@ -350,7 +350,7 @@ bool handleTouchScreen(LGFX_Device &dest)
     int32_t textX = buttonX + (BUTTON_WIDTH / 2);
     int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
 
-    dest.setTextDatum(textdatum_t::middle_center);
+    dest.setTextDatum(middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
 
     // determine how to handle the start and stop button
