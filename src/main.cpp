@@ -207,7 +207,6 @@ bool showStatusBar(statusBarType type, String &result)
 
     bar.clear();
 
-    char buffer[32];
     switch (type)
     {
     case SHOW_STRING:
@@ -215,6 +214,7 @@ bool showStatusBar(statusBarType type, String &result)
         break;
     case SHOW_STATUS:
     {
+        char buffer[30];
         snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
         bar.drawString(buffer, 0, 0);
         snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
@@ -232,6 +232,7 @@ bool showStatusBar(statusBarType type, String &result)
         time_t now = time(NULL);
         struct tm localTime;
         localtime_r(&now, &localTime);
+        char buffer[16];
         snprintf(buffer, sizeof(buffer), "%02i:%02i:%02i", localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
         bar.drawCenterString(buffer, bar.width() / 2, 0);
         break;
@@ -274,12 +275,15 @@ void setup()
     Serial.begin(115200);
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
     sdIsMounted = SD.begin(SDCARD_SS);
+    
     display.setRotation(0);
     display.setBrightness(110);
     display.begin();
+
     WiFi.mode(WIFI_STA);
     selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
+    
     vTaskPrioritySet(NULL, 9);
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
@@ -426,7 +430,7 @@ void loop()
     showStatusBar(currentBarType, str);
 
     static unsigned long lastUpdateMs = 0;
-    if (millis() - lastUpdateMs > 150)
+    if (millis() - lastUpdateMs > 500)
     {
         drawFreshMap(gps.location.lng(), gps.location.lat(), zoom);
         lastUpdateMs = millis();
