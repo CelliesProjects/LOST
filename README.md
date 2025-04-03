@@ -1,10 +1,10 @@
-# LOST GPS
+# LOST GPS logger
 
 [LGFX](https://github.com/lovyan03/LovyanGFX)-[OSM](https://github.com/CelliesProjects/OpenStreetMap-esp32)-[TinyGPS](https://github.com/mikalhart/TinyGPSPlus) and [PNGdec](https://github.com/bitbank2/PNGdec)
 
-This is a demo app for the [OpenstreetMap-esp32](https://github.com/CelliesProjects/OpenStreetMap-esp32) library.
+This is a demo app for the [OSM-esp32](https://github.com/CelliesProjects/OpenStreetMap-esp32) library.
 
-Currently only tested on a M5stack Core2 with the M5Stack GNNS module.
+Currently only tested on a M5stack Core2 with a M5Stack GNNS module.
 
 ## Installing this app
 

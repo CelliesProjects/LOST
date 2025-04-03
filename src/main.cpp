@@ -390,9 +390,7 @@ bool handleTouchScreen(LGFX_Device &dest)
             dest.drawString("Logging", textX, textY - DejaVu24.yAdvance, &DejaVu24);
         }
         else if (!sdIsMounted)
-        {
             dest.drawString("No SD", textX, textY - DejaVu24.yAdvance, &DejaVu24);
-        }
         break;
     case 1:
         dest.drawString("Home", textX, textY - DejaVu24.yAdvance, &DejaVu24);
