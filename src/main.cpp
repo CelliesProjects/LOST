@@ -64,11 +64,10 @@ bool connectToNetwork(const String &ssid)
 void drawNetworkList(std::vector<NetworkDetails> &networks)
 {
     display.fillScreen(TFT_BLACK);
-    display.setCursor(10, 10);
     display.drawCenterString("Select Network:", display.width() / 2, 0, &DejaVu18);
 
-    int rectHeight = 60;
-    int spacing = 10;
+    int rectHeight = 50;
+    int spacing = 5;
     int startY = 30;
 
     for (size_t i = 0; i < networks.size(); i++)
@@ -80,13 +79,13 @@ void drawNetworkList(std::vector<NetworkDetails> &networks)
     }
 }
 
-void checkTouch(std::vector<NetworkDetails> &networks, int32_t &network)
+void selectNetwork(std::vector<NetworkDetails> &networks, int32_t &network)
 {
     uint16_t x, y;
     if (display.getTouch(&x, &y))
     {
-        int rectHeight = 60;
-        int spacing = 10;
+        int rectHeight = 50;
+        int spacing = 5;
         int startY = 30;
 
         for (size_t i = 0; i < networks.size(); i++)
@@ -153,7 +152,7 @@ void selectNetwork()
         display.drawCenterString("No Known Networks", display.width() / 2, display.height() / 2, &DejaVu40);
         while (1)
             delay(100);
-    }    
+    }
 
     if (connectableNetworks.size() == 1)
     {
@@ -163,9 +162,10 @@ void selectNetwork()
     }
 
     drawNetworkList(connectableNetworks);
+
     int32_t selectedNetwork = -1;
     while (selectedNetwork == -1)
-        checkTouch(connectableNetworks, selectedNetwork);
+        selectNetwork(connectableNetworks, selectedNetwork);
 
     // TODO: check if we actually connected
 }
