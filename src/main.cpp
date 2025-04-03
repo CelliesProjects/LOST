@@ -273,23 +273,15 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
 void setup()
 {
     Serial.begin(115200);
-
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
-
     sdIsMounted = SD.begin(SDCARD_SS);
-
-    log_i("SD card %s", sdIsMounted ? "mounted" : "failed");
-
     display.setRotation(0);
     display.setBrightness(110);
     display.begin();
-
     WiFi.mode(WIFI_STA);
     selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
-
     vTaskPrioritySet(NULL, 9);
-
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
 }
