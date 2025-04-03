@@ -207,6 +207,7 @@ bool showStatusBar(statusBarType type, String &result)
 
     bar.clear();
 
+    char buffer[32];
     switch (type)
     {
     case SHOW_STRING:
@@ -214,15 +215,16 @@ bool showStatusBar(statusBarType type, String &result)
         break;
     case SHOW_STATUS:
     {
-        char buffer[30];
         snprintf(buffer, sizeof(buffer), "%3d km/h", static_cast<int>(gps.speed.kmph()));
         bar.drawString(buffer, 0, 0);
         snprintf(buffer, sizeof(buffer), "S:%li", gps.satellites.value());
         bar.drawCenterString(buffer, 130, 0);
-        const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, gps.location.lat(), gps.location.lng());
-        snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
-        bar.drawRightString(buffer, bar.width(), 0);
-
+        if (homeLatitude || homeLongitude)
+        {
+            const float homeDistance = gps.distanceBetween(homeLatitude, homeLongitude, gps.location.lat(), gps.location.lng());
+            snprintf(buffer, sizeof(buffer), "Home %i km", static_cast<int>(homeDistance) / 1000);
+            bar.drawRightString(buffer, bar.width(), 0);
+        }
         break;
     }
     case SHOW_CLOCK:
@@ -230,11 +232,8 @@ bool showStatusBar(statusBarType type, String &result)
         time_t now = time(NULL);
         struct tm localTime;
         localtime_r(&now, &localTime);
-
-        char timeBuffer[16];
-        snprintf(timeBuffer, sizeof(timeBuffer), "%02i:%02i:%02i", localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
-
-        bar.drawCenterString(timeBuffer, bar.width() / 2, 0);
+        snprintf(buffer, sizeof(buffer), "%02i:%02i:%02i", localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
+        bar.drawCenterString(buffer, bar.width() / 2, 0);
         break;
     }
     default:
@@ -382,15 +381,14 @@ bool handleTouchScreen(LGFX_Device &dest)
         break;
     case 1:
         dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
-        dest.drawString("Saving", textX, textY, &DejaVu24);
-        // beep();
+        dest.drawString("Saved", textX, textY, &DejaVu24);
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
-        vTaskDelay(pdMS_TO_TICKS(160));
-        dest.setTextColor(TFT_BLACK, TFT_GREEN);
-        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_GREEN);
-        dest.drawString("Home", textX, textY - 20, &DejaVu24);
-        dest.drawString("Set", textX, textY + 20, &DejaVu24);
+        {
+            String dummy;
+            showStatusBar(currentBarType, dummy);
+        }
+        vTaskDelay(pdMS_TO_TICKS(400));
         break;
     case 2:
         dest.drawString("Stub!", textX, textY, &DejaVu24);
@@ -428,7 +426,7 @@ void loop()
     showStatusBar(currentBarType, str);
 
     static unsigned long lastUpdateMs = 0;
-    if (millis() - lastUpdateMs > 500)
+    if (millis() - lastUpdateMs > 150)
     {
         drawFreshMap(gps.location.lng(), gps.location.lat(), zoom);
         lastUpdateMs = millis();
