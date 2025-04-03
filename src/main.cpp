@@ -1,16 +1,14 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <WiFi.h>
-#include <WiFiMulti.h>
-#include <esp_sntp.h>
-#include <esp32-hal-ledc.h>
 
-#include <OpenStreetMap-esp32.h>
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
+#include <OpenStreetMap-esp32.h>
 #include <TinyGPS++.h>
 
 #include "secrets.h"
+#include "NetworkDetails.h"
 
 static const int RXPin = 13, TXPin = 14;
 static const uint32_t GPSBaud = 38400;
@@ -20,7 +18,6 @@ HardwareSerial hws(2);
 LGFX display;
 OpenStreetMap osm;
 TinyGPSPlus gps;
-WiFiMulti wifiMulti;
 
 enum statusBarType
 {
@@ -34,6 +31,138 @@ static LGFX_Sprite currentMap(&display);
 static statusBarType currentBarType = SHOW_STATUS;
 static bool sdIsMounted = false;
 static bool isRecording = false;
+
+bool showStatusBar(statusBarType type, String &result);
+
+bool connectToNetwork(String &ssid)
+{
+    for (const auto &net : knownNetworks)
+    {
+        if (ssid == net.ssid)
+        {
+            WiFi.setSleep(false);
+            WiFi.begin(net.ssid, net.password);
+            log_i("Connecting to %s...", net.ssid);
+
+            unsigned long startAttemptTime = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000)
+                vTaskDelay(pdMS_TO_TICKS(5));
+
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                log_i("Connected! IP: %s", WiFi.localIP().toString().c_str());
+                return true;
+            }
+            log_i("Connection failed.");
+            return false;
+        }
+    }
+    log_i("Selected network is not in the known list.");
+    return false;
+}
+
+void drawNetworkList(std::vector<String> &networks)
+{
+    display.fillScreen(TFT_BLACK);
+    display.drawCenterString("Select Network:", display.width() / 2, 0, &DejaVu18);
+
+    int rectHeight = 40;
+    int spacing = 5;
+    int startY = 30;
+
+    for (size_t i = 0; i < networks.size(); i++)
+    {
+        int yPos = startY + i * (rectHeight + spacing);
+        display.drawRect(0, yPos, display.width(), rectHeight, TFT_WHITE);
+        display.setTextColor(TFT_WHITE);
+        display.setTextDatum(middle_centre);
+        display.drawString(networks[i], display.width() / 2, yPos + (rectHeight / 2), &DejaVu24);
+    }
+}
+
+void selectNetworkFromList(std::vector<String> &networks, int32_t &network)
+{
+    uint16_t x, y;
+    if (display.getTouch(&x, &y))
+    {
+        int rectHeight = 40;
+        int spacing = 5;
+        int startY = 30;
+
+        for (size_t i = 0; i < networks.size(); i++)
+        {
+            const int yPos = startY + i * (rectHeight + spacing);
+            if (y > yPos && y < yPos + rectHeight)
+            {
+                display.fillRect(0, yPos, display.width(), rectHeight, TFT_DARKCYAN);
+                display.setTextColor(TFT_WHITE, TFT_DARKCYAN);
+                display.setTextDatum(middle_centre);
+                display.drawString(networks[i], display.width() / 2, yPos + (rectHeight / 2), &DejaVu24);
+                network = i;
+                connectToNetwork(networks[i]);
+                return;
+            }
+        }
+    }
+}
+
+bool isKnownNetwork(const String &ssid)
+{
+    for (const auto &net : knownNetworks)
+    {
+        if (ssid == net.ssid)
+            return true;
+    }
+    return false;
+}
+
+void selectNetwork()
+{
+    std::vector<String> networks;
+    while (true)
+    {
+        display.fillScreen(TFT_BLACK);
+
+        String str = "Scanning for WiFi networks";
+        showStatusBar(SHOW_STRING, str);
+
+        int numNetworks = WiFi.scanNetworks();
+        for (int i = 0; i < numNetworks; i++)
+        {
+            String ssid = WiFi.SSID(i);
+            if (isKnownNetwork(ssid))
+                networks.push_back(ssid);
+        }
+
+        if (networks.empty())
+        {
+            display.fillScreen(TFT_BLACK);
+            display.drawCenterString("No known networks", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
+            display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+
+            uint16_t x, y;
+            while (!display.getTouch(&x, &y))
+                delay(10);
+        }
+        else
+            break;
+    }
+
+    if (networks.size() == 1)
+    {
+        connectToNetwork(networks[0]);
+        // TODO: check if really connected
+        return;
+    }
+
+    drawNetworkList(networks);
+
+    int32_t selectedNetwork = -1;
+    while (selectedNetwork == -1)
+        selectNetworkFromList(networks, selectedNetwork);
+
+    // TODO: check if really connected
+}
 
 void drawMap(LGFX_Sprite &map)
 {
@@ -144,36 +273,17 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
 void setup()
 {
     Serial.begin(115200);
-
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
-
     sdIsMounted = SD.begin(SDCARD_SS);
-
-    log_i("SD card %s", sdIsMounted ? "mounted" : "failed");
-
     display.setRotation(0);
     display.setBrightness(110);
     display.begin();
-
-    String str = "Connecting WiFi";
-    showStatusBar(SHOW_STRING, str);
-
-    wifiMulti.addAP(ssid, password);
-    wifiMulti.addAP(ssid2, password2);
-
-    WiFi.setSleep(false);
-    while (wifiMulti.run() != WL_CONNECTED)
-        delay(5);
-
+    WiFi.mode(WIFI_STA);
+    selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
-
     vTaskPrioritySet(NULL, 9);
-
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
-
-    str = "Waiting for location";
-    showStatusBar(SHOW_STRING, str);
 }
 
 constexpr int32_t MENU_HEIGHT = 120;
@@ -242,7 +352,7 @@ bool handleTouchScreen(LGFX_Device &dest)
     int32_t textX = buttonX + (BUTTON_WIDTH / 2);
     int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
 
-    dest.setTextDatum(textdatum_t::middle_center);
+    dest.setTextDatum(middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
 
     // determine how to handle the start and stop button
