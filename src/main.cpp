@@ -1,8 +1,6 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <WiFi.h>
-#include <WiFiMulti.h>
-#include <esp_sntp.h>
 
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
@@ -20,7 +18,6 @@ HardwareSerial hws(2);
 LGFX display;
 OpenStreetMap osm;
 TinyGPSPlus gps;
-WiFiMulti wifiMulti;
 
 enum statusBarType
 {
