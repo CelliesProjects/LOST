@@ -66,7 +66,7 @@ void drawNetworkList(std::vector<String> &networks)
     display.fillScreen(TFT_BLACK);
     display.drawCenterString("Select Network:", display.width() / 2, 0, &DejaVu18);
 
-    int rectHeight = 50;
+    int rectHeight = 40;
     int spacing = 5;
     int startY = 30;
 
@@ -75,16 +75,17 @@ void drawNetworkList(std::vector<String> &networks)
         int yPos = startY + i * (rectHeight + spacing);
         display.drawRect(0, yPos, display.width(), rectHeight, TFT_WHITE);
         display.setTextColor(TFT_WHITE);
-        display.drawCenterString(networks[i], display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
+        display.setTextDatum(middle_centre);
+        display.drawString(networks[i], display.width() / 2, yPos + (rectHeight / 2), &DejaVu24);
     }
 }
 
-void selectNetwork(std::vector<String> &networks, int32_t &network)
+void selectNetworkFromList(std::vector<String> &networks, int32_t &network)
 {
     uint16_t x, y;
     if (display.getTouch(&x, &y))
     {
-        int rectHeight = 50;
+        int rectHeight = 40;
         int spacing = 5;
         int startY = 30;
 
@@ -95,10 +96,8 @@ void selectNetwork(std::vector<String> &networks, int32_t &network)
             {
                 display.fillRect(0, yPos, display.width(), rectHeight, TFT_DARKCYAN);
                 display.setTextColor(TFT_WHITE, TFT_DARKCYAN);
-                display.drawCenterString(networks[i], display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
-
-                display.setTextColor(TFT_WHITE, TFT_BLACK);
-                display.drawCenterString("Connecting...", display.width() / 2, display.height() - 25, &DejaVu24);
+                display.setTextDatum(middle_centre);
+                display.drawString(networks[i], display.width() / 2, yPos + (rectHeight / 2), &DejaVu24);
                 network = i;
                 connectToNetwork(networks[i]);
                 return;
@@ -124,7 +123,7 @@ void selectNetwork()
     for (int i = 0; i < numNetworks; i++)
     {
         String ssid = WiFi.SSID(i);
-        if (isKnownNetwork(ssid)) 
+        if (isKnownNetwork(ssid))
             networks.push_back(ssid);
     }
 
@@ -132,12 +131,14 @@ void selectNetwork()
     {
         display.fillScreen(TFT_BLACK);
         display.drawCenterString("No Known Networks", display.width() / 2, display.height() / 2, &DejaVu40);
-        while (1) delay(100);
+        while (1)
+            delay(100);
     }
 
     if (networks.size() == 1)
     {
         connectToNetwork(networks[0]);
+        // TODO: check if really connected
         return;
     }
 
@@ -145,9 +146,10 @@ void selectNetwork()
 
     int32_t selectedNetwork = -1;
     while (selectedNetwork == -1)
-        selectNetwork(networks, selectedNetwork);
-}
+        selectNetworkFromList(networks, selectedNetwork);
 
+    // TODO: check if really connected
+}
 
 void drawMap(LGFX_Sprite &map)
 {
