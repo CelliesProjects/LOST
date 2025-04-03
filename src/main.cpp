@@ -149,17 +149,15 @@ void selectNetwork()
     }
 
     if (networks.size() == 1)
-    {
         connectToNetwork(networks[0]);
-        // TODO: check if really connected
-        return;
+    else
+    {
+        drawNetworkList(networks);
+
+        int32_t selectedNetwork = -1;
+        while (selectedNetwork == -1)
+            selectNetworkFromList(networks, selectedNetwork);
     }
-
-    drawNetworkList(networks);
-
-    int32_t selectedNetwork = -1;
-    while (selectedNetwork == -1)
-        selectNetworkFromList(networks, selectedNetwork);
 
     // TODO: check if really connected - see below
 
@@ -350,7 +348,8 @@ bool handleTouchScreen(LGFX_Device &dest)
         return false;
     }
 
-    uint8_t buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1 : 2;
+    uint8_t buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1
+                                                                    : 2;
     int32_t buttonX = BUTTON_X[buttonIndex];
     uint16_t color = BUTTON_COLORS[buttonIndex];
 
@@ -435,6 +434,12 @@ void loop()
         return;
     }
     lastGpsUpdate = millis();
+
+    if (isRecording)
+    {
+        // save a [location and time] to a vector
+        // once [x] sets are collected write to file
+    }
 
     String str;
     showStatusBar(currentBarType, str);
