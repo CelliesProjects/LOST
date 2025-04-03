@@ -123,7 +123,7 @@ void selectNetwork()
     {
         display.fillScreen(TFT_BLACK);
 
-        String str = "Scanning for WiFi networks";
+        String str = "Scanning WiFi networks...";
         showStatusBar(SHOW_STRING, str);
 
         int numNetworks = WiFi.scanNetworks();
@@ -161,7 +161,12 @@ void selectNetwork()
     while (selectedNetwork == -1)
         selectNetworkFromList(networks, selectedNetwork);
 
-    // TODO: check if really connected
+    // TODO: check if really connected - see below
+
+    // allow the user to define a callback function that will validate the connection to the Internet.
+    // if the callback returns true, the connection is considered valid and the AP will added to the validated AP list.
+    // set the callback to NULL to disable the feature and validate any SSID that is in the list.
+    // void setConnectionTestCallbackFunc(ConnectionTestCB_t cbFunc);
 }
 
 void drawMap(LGFX_Sprite &map)
@@ -345,8 +350,7 @@ bool handleTouchScreen(LGFX_Device &dest)
         return false;
     }
 
-    uint8_t buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1
-                                                                    : 2;
+    uint8_t buttonIndex = (x < BUTTON_X[1]) ? 0 : (x < BUTTON_X[2]) ? 1 : 2;
     int32_t buttonX = BUTTON_X[buttonIndex];
     uint16_t color = BUTTON_COLORS[buttonIndex];
 
@@ -356,19 +360,17 @@ bool handleTouchScreen(LGFX_Device &dest)
     int32_t textY = (dest.height() - MENU_HEIGHT) + (MENU_HEIGHT / 2);
 
     dest.setTextDatum(middle_center);
-    dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
+    dest.setTextColor(TFT_BLACK, color);
 
     // TODO: (cheap) sanity checks on SD presence
-    char startBtnTxt[10];
-    snprintf(startBtnTxt, sizeof(startBtnTxt), "%s", sdIsMounted ? "Start" : "NO SD");
 
-    char stopBtnTxt[10];
-    snprintf(stopBtnTxt, sizeof(stopBtnTxt), "%s", isRecording ? "STOP" : "");
+    const char *buttonTexts[3][2] = {
+        {sdIsMounted ? (isRecording ? "REC" : "Start") : "NO SD", "Log"},
+        {"Save", "Home"},
+        {isRecording ? "STOP" : "", ""}};
 
-    const char *line1[] = {startBtnTxt, "Save", stopBtnTxt};
-    const char *line2[] = {"Log", "Home", ""};
-    dest.drawString(line1[buttonIndex], textX, textY - 20, &DejaVu24);
-    dest.drawString(line2[buttonIndex], textX, textY + 20, &DejaVu24);
+    dest.drawString(buttonTexts[buttonIndex][0], textX, textY - DejaVu24.yAdvance, &DejaVu24);
+    dest.drawString(buttonTexts[buttonIndex][1], textX, textY, &DejaVu24);
 
     if (!confirm(display, buttonIndex))
     {
@@ -382,12 +384,19 @@ bool handleTouchScreen(LGFX_Device &dest)
     switch (buttonIndex)
     {
     case 0:
-        // start logging
-        dest.drawString("Stub!", textX, textY, &DejaVu24);
+        if (sdIsMounted && !isRecording)
+        {
+            isRecording = true;
+            dest.drawString("Logging", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+        }
+        else if (!sdIsMounted)
+        {
+            dest.drawString("No SD", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+        }
         break;
     case 1:
-        dest.drawString("Home", textX, textY - 20, &DejaVu24);
-        dest.drawString("Saved", textX, textY + 20, &DejaVu24);
+        dest.drawString("Home", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+        dest.drawString("Saved", textX, textY, &DejaVu24);
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
         {
@@ -396,8 +405,11 @@ bool handleTouchScreen(LGFX_Device &dest)
         }
         break;
     case 2:
-        // stop logging
-        dest.drawString("Stub!", textX, textY, &DejaVu24);
+        if (isRecording)
+        {
+            isRecording = false;
+            dest.drawString("Stopped", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+        }
         break;
     default:
         log_e("out of range button %i pressed?", buttonIndex);
