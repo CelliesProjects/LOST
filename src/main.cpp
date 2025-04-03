@@ -35,7 +35,7 @@ static statusBarType currentBarType = SHOW_STATUS;
 static bool sdIsMounted = false;
 static bool isRecording = false;
 
-bool connectToNetwork(const String &ssid)
+bool connectToNetwork(String &ssid)
 {
     for (const auto &net : knownNetworks)
     {
@@ -61,7 +61,7 @@ bool connectToNetwork(const String &ssid)
     return false;
 }
 
-void drawNetworkList(std::vector<NetworkDetails> &networks)
+void drawNetworkList(std::vector<String> &networks)
 {
     display.fillScreen(TFT_BLACK);
     display.drawCenterString("Select Network:", display.width() / 2, 0, &DejaVu18);
@@ -75,11 +75,11 @@ void drawNetworkList(std::vector<NetworkDetails> &networks)
         int yPos = startY + i * (rectHeight + spacing);
         display.drawRect(0, yPos, display.width(), rectHeight, TFT_WHITE);
         display.setTextColor(TFT_WHITE);
-        display.drawCenterString(networks[i].ssid, display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
+        display.drawCenterString(networks[i], display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
     }
 }
 
-void selectNetwork(std::vector<NetworkDetails> &networks, int32_t &network)
+void selectNetwork(std::vector<String> &networks, int32_t &network)
 {
     uint16_t x, y;
     if (display.getTouch(&x, &y))
@@ -95,12 +95,12 @@ void selectNetwork(std::vector<NetworkDetails> &networks, int32_t &network)
             {
                 display.fillRect(0, yPos, display.width(), rectHeight, TFT_DARKCYAN);
                 display.setTextColor(TFT_WHITE, TFT_DARKCYAN);
-                display.drawCenterString(networks[i].ssid, display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
+                display.drawCenterString(networks[i], display.width() / 2, yPos + (rectHeight / 2) - 8, &DejaVu24);
 
                 display.setTextColor(TFT_WHITE, TFT_BLACK);
                 display.drawCenterString("Connecting...", display.width() / 2, display.height() - 25, &DejaVu24);
                 network = i;
-                connectToNetwork(networks[i].ssid);
+                connectToNetwork(networks[i]);
                 return;
             }
         }
@@ -119,56 +119,35 @@ bool isKnownNetwork(const String &ssid)
 
 void selectNetwork()
 {
+    std::vector<String> networks;
     int numNetworks = WiFi.scanNetworks();
-    std::vector<String> availableNetworks;
     for (int i = 0; i < numNetworks; i++)
     {
         String ssid = WiFi.SSID(i);
-        if (isKnownNetwork(ssid))
-            availableNetworks.push_back(ssid);
+        if (isKnownNetwork(ssid)) 
+            networks.push_back(ssid);
     }
 
-    if (availableNetworks.empty())
-    {
-        display.fillScreen(TFT_BLACK);
-        display.drawCenterString("No Networks", display.width() / 2, display.height() / 2, &DejaVu40);
-        while (1)
-            delay(100);
-    }
-
-    std::vector<NetworkDetails> connectableNetworks;
-    for (const auto &ssid : availableNetworks)
-    {
-        for (const auto &net : knownNetworks)
-        {
-            if (ssid == net.ssid)
-                connectableNetworks.push_back(net);
-        }
-    }
-
-    if (connectableNetworks.empty())
+    if (networks.empty())
     {
         display.fillScreen(TFT_BLACK);
         display.drawCenterString("No Known Networks", display.width() / 2, display.height() / 2, &DejaVu40);
-        while (1)
-            delay(100);
+        while (1) delay(100);
     }
 
-    if (connectableNetworks.size() == 1)
+    if (networks.size() == 1)
     {
-        connectToNetwork(connectableNetworks.begin()->ssid);
-        // TODO: check if we actually connected
+        connectToNetwork(networks[0]);
         return;
     }
 
-    drawNetworkList(connectableNetworks);
+    drawNetworkList(networks);
 
     int32_t selectedNetwork = -1;
     while (selectedNetwork == -1)
-        selectNetwork(connectableNetworks, selectedNetwork);
-
-    // TODO: check if we actually connected
+        selectNetwork(networks, selectedNetwork);
 }
+
 
 void drawMap(LGFX_Sprite &map)
 {
@@ -290,7 +269,7 @@ void setup()
     display.setBrightness(110);
     display.begin();
 
-    String str = "Connecting WiFi";
+    String str = "Scanning for WiFi networks";
     showStatusBar(SHOW_STRING, str);
 
     WiFi.mode(WIFI_STA);
