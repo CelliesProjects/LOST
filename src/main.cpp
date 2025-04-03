@@ -32,12 +32,15 @@ static statusBarType currentBarType = SHOW_STATUS;
 static bool sdIsMounted = false;
 static bool isRecording = false;
 
+bool showStatusBar(statusBarType type, String &result);
+
 bool connectToNetwork(String &ssid)
 {
     for (const auto &net : knownNetworks)
     {
         if (ssid == net.ssid)
         {
+            WiFi.setSleep(false);
             WiFi.begin(net.ssid, net.password);
             log_i("Connecting to %s...", net.ssid);
 
@@ -116,20 +119,33 @@ bool isKnownNetwork(const String &ssid)
 void selectNetwork()
 {
     std::vector<String> networks;
-    int numNetworks = WiFi.scanNetworks();
-    for (int i = 0; i < numNetworks; i++)
-    {
-        String ssid = WiFi.SSID(i);
-        if (isKnownNetwork(ssid))
-            networks.push_back(ssid);
-    }
-
-    if (networks.empty())
+    while (true)
     {
         display.fillScreen(TFT_BLACK);
-        display.drawCenterString("No Known Networks", display.width() / 2, display.height() / 2, &DejaVu40);
-        while (1)
-            delay(100);
+
+        String str = "Scanning for WiFi networks";
+        showStatusBar(SHOW_STRING, str);
+
+        int numNetworks = WiFi.scanNetworks();
+        for (int i = 0; i < numNetworks; i++)
+        {
+            String ssid = WiFi.SSID(i);
+            if (isKnownNetwork(ssid))
+                networks.push_back(ssid);
+        }
+
+        if (networks.empty())
+        {
+            display.fillScreen(TFT_BLACK);
+            display.drawCenterString("No known networks", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
+            display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+
+            uint16_t x, y;
+            while (!display.getTouch(&x, &y))
+                delay(10);
+        }
+        else
+            break;
     }
 
     if (networks.size() == 1)
@@ -268,9 +284,6 @@ void setup()
     display.setBrightness(110);
     display.begin();
 
-    String str = "Scanning for WiFi networks";
-    showStatusBar(SHOW_STRING, str);
-
     WiFi.mode(WIFI_STA);
     selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
@@ -279,9 +292,6 @@ void setup()
 
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
-
-    str = "Waiting for location";
-    showStatusBar(SHOW_STRING, str);
 }
 
 constexpr int32_t MENU_HEIGHT = 120;
