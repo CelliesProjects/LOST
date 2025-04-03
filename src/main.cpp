@@ -275,7 +275,7 @@ void setup()
     Serial.begin(115200);
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
     sdIsMounted = SD.begin(SDCARD_SS);
-    
+
     display.setRotation(0);
     display.setBrightness(110);
     display.begin();
@@ -283,7 +283,7 @@ void setup()
     WiFi.mode(WIFI_STA);
     selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
-    
+
     vTaskPrioritySet(NULL, 9);
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
@@ -358,14 +358,15 @@ bool handleTouchScreen(LGFX_Device &dest)
     dest.setTextDatum(middle_center);
     dest.setTextColor(TFT_BLACK, BUTTON_COLORS[buttonIndex]);
 
-    // determine how to handle the start and stop button
-    // if (!sdIsMounted)
-    //    sdIsMounted = SD.begin(SDCARD_SS);
+    // TODO: (cheap) sanity checks on SD presence
     char startBtnTxt[10];
     snprintf(startBtnTxt, sizeof(startBtnTxt), "%s", sdIsMounted ? "Start" : "NO SD");
 
-    const char *line1[] = {startBtnTxt, "Set", startBtnTxt};
-    const char *line2[] = {"", "Home", ""};
+    char stopBtnTxt[10];
+    snprintf(stopBtnTxt, sizeof(stopBtnTxt), "%s", isRecording ? "STOP" : "");
+
+    const char *line1[] = {startBtnTxt, "Save", stopBtnTxt};
+    const char *line2[] = {"Log", "Home", ""};
     dest.drawString(line1[buttonIndex], textX, textY - 20, &DejaVu24);
     dest.drawString(line2[buttonIndex], textX, textY + 20, &DejaVu24);
 
@@ -381,29 +382,28 @@ bool handleTouchScreen(LGFX_Device &dest)
     switch (buttonIndex)
     {
     case 0:
+        // start logging
         dest.drawString("Stub!", textX, textY, &DejaVu24);
         break;
     case 1:
-        dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
-        dest.drawString("Saved", textX, textY, &DejaVu24);
+        dest.drawString("Home", textX, textY - 20, &DejaVu24);
+        dest.drawString("Saved", textX, textY + 20, &DejaVu24);
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
         {
             String dummy;
             showStatusBar(currentBarType, dummy);
         }
-        vTaskDelay(pdMS_TO_TICKS(400));
         break;
     case 2:
+        // stop logging
         dest.drawString("Stub!", textX, textY, &DejaVu24);
         break;
     default:
         log_e("out of range button %i pressed?", buttonIndex);
         break;
     }
-    String dummy;
-    showStatusBar(currentBarType, dummy);
-    vTaskDelay(pdMS_TO_TICKS(800));
+    vTaskDelay(pdMS_TO_TICKS(800)); // TODO: fix this so that the status bar is updated
     return true;
 }
 
