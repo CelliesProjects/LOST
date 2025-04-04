@@ -1,8 +1,6 @@
 #ifndef NETWORK_DETAILS_H
 #define NETWORK_DETAILS_H
 
-#include <Arduino.h>
-
 struct NetworkDetails
 {
     const char *ssid;
