@@ -48,8 +48,8 @@ bool connectToNetwork(String &ssid)
             WiFi.begin(net.ssid, net.password);
             log_i("Connecting to %s...", net.ssid);
 
-            unsigned long startAttemptTime = millis();
-            while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000)
+            unsigned long startMs = millis();
+            while (WiFi.status() != WL_CONNECTED && millis() - startMs < 10000)
                 vTaskDelay(pdMS_TO_TICKS(5));
 
             if (WiFi.status() == WL_CONNECTED)
@@ -84,7 +84,7 @@ void drawNetworkList(std::vector<String> &networks)
     }
 }
 
-void selectNetworkFromList(std::vector<String> &networks, int32_t &network)
+void connectToNetworkFromList(std::vector<String> &networks, int32_t &network)
 {
     uint16_t x, y;
     if (display.getTouch(&x, &y))
@@ -120,9 +120,8 @@ bool isKnownNetwork(const String &ssid)
     return false;
 }
 
-void selectNetwork()
+void scanForKnownNetWorks(std::vector<String> &networks)
 {
-    std::vector<String> networks;
     while (true)
     {
         display.fillScreen(TFT_BLACK);
@@ -137,45 +136,51 @@ void selectNetwork()
             if (isKnownNetwork(ssid))
                 networks.push_back(ssid);
         }
-
-        if (networks.empty())
-        {
-            display.fillScreen(TFT_BLACK);
-            display.drawCenterString("No known networks", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
-            display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
-
-            uint16_t x, y;
-            while (!display.getTouch(&x, &y))
-                delay(10);
-        }
-        else
+        if (networks.size())
             break;
-    }
 
-    if (networks.size() == 1)
-        connectToNetwork(networks[0]);
-    else
+        display.fillScreen(TFT_BLACK);
+        display.drawCenterString("No known networks", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
+        display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+
+        uint16_t x, y;
+        while (!display.getTouch(&x, &y))
+            vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+void selectNetwork()
+{
+    while (true)
     {
-        drawNetworkList(networks);
+        std::vector<String> networks;
+        scanForKnownNetWorks(networks);
+        if (networks.size() == 1)
+            connectToNetwork(networks[0]);
+        else
+        {
+            drawNetworkList(networks);
+            int32_t selectedNetwork = -1;
+            while (selectedNetwork == -1)
+                connectToNetworkFromList(networks, selectedNetwork);
+        }
+        if (WiFi.isConnected())
+            break;
 
-        int32_t selectedNetwork = -1;
-        while (selectedNetwork == -1)
-            selectNetworkFromList(networks, selectedNetwork);
+        display.fillScreen(TFT_BLACK);
+        display.drawCenterString("Could not connect", display.width() / 2, (display.height() / 2) - 30, &DejaVu18);
+        display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+
+        uint16_t x, y;
+        while (!display.getTouch(&x, &y))
+            vTaskDelay(pdMS_TO_TICKS(10));
     }
-
-    // TODO: check if really connected - see below
-
-    // allow the user to define a callback function that will validate the connection to the Internet.
-    // if the callback returns true, the connection is considered valid and the AP will added to the validated AP list.
-    // set the callback to NULL to disable the feature and validate any SSID that is in the list.
-    // void setConnectionTestCallbackFunc(ConnectionTestCB_t cbFunc);
 }
 
 void drawMap(LGFX_Sprite &map)
 {
-    if (!map.getBuffer())
-        return;
-    map.pushSprite(0, statusBarFont->yAdvance);
+    if (map.getBuffer())
+        map.pushSprite(0, statusBarFont->yAdvance);
 }
 
 bool waitForNewGPSLocation(unsigned long timeoutMs)
@@ -279,13 +284,18 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
     }
 
     if (isRecording)
+    {
         currentMap.fillCircle(MAP_REC_OFFSET, MAP_REC_OFFSET, MAP_REC_SIZE, TFT_RED);
+        currentMap.setTextColor(TFT_BLACK);
+        currentMap.setTextDatum(middle_right);
+        currentMap.drawString(logFile.name(), currentMap.width() - MAP_REC_OFFSET, MAP_REC_OFFSET, &DejaVu24);
+    }
 
     const int32_t midX = currentMap.width() / 2;
     const int32_t midY = currentMap.height() / 2;
 
     static unsigned long initTimeMs = millis();
-    if (millis() - initTimeMs < 10000)
+    if (millis() - initTimeMs < 5000)
         showProgramName(midX);
     else
     {
@@ -299,9 +309,9 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
 
 void setup()
 {
-    delay(20); // without SD does not boot reliable
     Serial.begin(115200);
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
+    delay(30); // without a delay SD does not boot reliable
     sdIsMounted = SD.begin(SDCARD_SS);
 
     display.setRotation(0);
@@ -312,7 +322,7 @@ void setup()
     selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
 
-    vTaskPrioritySet(NULL, 11);
+    vTaskPrioritySet(NULL, 11); // Turn it to 11!
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
 }
@@ -415,7 +425,7 @@ bool handleTouchScreen(LGFX_Device &dest)
 
     if (!confirm(display, buttonIndex))
     {
-        vTaskDelay(pdMS_TO_TICKS(300)); // change so that statusbar is updated
+        vTaskDelay(pdMS_TO_TICKS(300)); // change so that -the clock- statusbar is updated
         return true;
     }
 
@@ -444,12 +454,20 @@ bool handleTouchScreen(LGFX_Device &dest)
                 break;
             }
             display.fillCircle(MAP_REC_OFFSET, MAP_REC_OFFSET + statusBarFont->yAdvance, MAP_REC_SIZE, TFT_RED);
+            display.setTextColor(TFT_BLACK);
+            textdatum_t datum = display.getTextDatum();
+            display.setTextDatum(middle_right);
+            display.drawString(logFile.name(), display.width() - MAP_REC_OFFSET, statusBarFont->yAdvance + MAP_REC_OFFSET, &DejaVu24);
+            display.setTextDatum(datum);
 
             // write a data header for conversion tools
             logFile.print("timestamp,latitude,longitude,altitude\n");
             isRecording = true;
             dest.drawString("Logging", textX, textY - font->yAdvance, font);
             currentMap.fillCircle(MAP_REC_OFFSET, MAP_REC_OFFSET, MAP_REC_SIZE, TFT_RED);
+            currentMap.setTextColor(TFT_BLACK);
+            currentMap.setTextDatum(middle_right);
+            currentMap.drawString(logFile.name(), display.width() - MAP_REC_OFFSET, MAP_REC_OFFSET, &DejaVu24);
         }
         else if (!sdIsMounted)
             dest.drawString("No SD", textX, textY - font->yAdvance, font);
