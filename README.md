@@ -19,6 +19,12 @@ Before flashing the following source should be adjusted to your needs and saved 
 double homeLongitude = 0.0;
 double homeLatitude = 0.0;
 
+// Central European Time - see https://remotemonitoringsystems.ca/time-zone-abbreviations.php
+constexpr char *TIME_ZONE = "CET-1CEST,M3.5.0/2,M10.5.0/3";
+
+// Change `nl` to your country iso code for better latency
+constexpr char *NTP_POOL = "nl.pool.ntp.org";
+
 constexpr NetworkDetails net1("wifi network1", "wifi network 1 password");
 constexpr NetworkDetails net2("wifi network2", "wifi network 2 password");
 

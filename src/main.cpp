@@ -320,7 +320,7 @@ void setup()
 
     WiFi.mode(WIFI_STA);
     selectNetwork();
-    configTzTime(TIMEZONE, NTP_POOL);
+    configTzTime(TIME_ZONE, NTP_POOL);
 
     vTaskPrioritySet(NULL, 11); // Turn it to 11!
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
