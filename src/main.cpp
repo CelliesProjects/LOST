@@ -6,18 +6,22 @@
 #include <LovyanGFX.hpp>
 #include <OpenStreetMap-esp32.h>
 #include <TinyGPS++.h>
+#include <PNGdec.h>
 
 #include "secrets.h"
-#include "NetworkDetails.h"
 
-static const int RXPin = 13, TXPin = 14;
-static const uint32_t GPSBaud = 38400;
-static const GFXfont *statusBarFont = &DejaVu18;
+static constexpr int8_t RXPin = 13, TXPin = 14;
+static constexpr uint32_t GPSBaud = 38400;
+static constexpr GFXfont const *statusBarFont = &DejaVu18;
+static constexpr uint16_t MAP_REC_OFFSET = 25;
+static constexpr uint16_t MAP_REC_SIZE = 12;
+static constexpr uint16_t SAVE_INTERVAL_MS = 500;
 
 HardwareSerial hws(2);
 LGFX display;
 OpenStreetMap osm;
 TinyGPSPlus gps;
+File logFile;
 
 enum statusBarType
 {
@@ -248,6 +252,22 @@ bool showStatusBar(statusBarType type, String &result)
     return true;
 }
 
+void showProgramName(int32_t midX)
+{
+    constexpr char *PROGRAM_NAME = "LOST";
+    constexpr char *LOST = "LGFX - OSM - TinyGPS";
+    constexpr char *AND_PNGDEC = "and PNGdec";
+
+    currentMap.setTextColor(TFT_BLACK);
+    currentMap.drawCenterString(PROGRAM_NAME, midX - 1, 30, &DejaVu72);
+    currentMap.drawCenterString(PROGRAM_NAME, midX + 1, 30, &DejaVu72);
+    currentMap.drawCenterString(LOST, midX, 110, &DejaVu24);
+    currentMap.drawCenterString(LOST, midX - 1, 110, &DejaVu24);
+    currentMap.drawCenterString(AND_PNGDEC, midX, 140, &DejaVu24);
+    currentMap.drawCenterString(AND_PNGDEC, midX - 1, 140, &DejaVu24);
+    currentMap.drawCenterString(GIT_VERSION, midX, 170, &DejaVu18);
+}
+
 void drawFreshMap(double longitude, double latitude, uint8_t zoom)
 {
     if (!osm.fetchMap(currentMap, longitude, latitude, zoom))
@@ -258,23 +278,28 @@ void drawFreshMap(double longitude, double latitude, uint8_t zoom)
         return;
     }
 
-    currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 10, TFT_DARKCYAN);
-    currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 6, TFT_DARKCYAN);
-    currentMap.drawCircle(currentMap.width() / 2, currentMap.height() / 2, 3, TFT_BLACK);
+    if (isRecording)
+        currentMap.fillCircle(MAP_REC_OFFSET, MAP_REC_OFFSET, MAP_REC_SIZE, TFT_RED);
+
+    const int32_t midX = currentMap.width() / 2;
+    const int32_t midY = currentMap.height() / 2;
 
     static unsigned long initTimeMs = millis();
-    if (millis() - initTimeMs < 4000)
+    if (millis() - initTimeMs < 10000)
+        showProgramName(midX);
+    else
     {
-        currentMap.setTextColor(TFT_BLACK);
-        currentMap.drawCenterString("LOST", currentMap.width() / 2, 30, &DejaVu72);
-        currentMap.drawCenterString("LGFX OSM TinyGPS", currentMap.width() / 2, 110, statusBarFont);
-        currentMap.drawCenterString(GIT_VERSION, currentMap.width() / 2, 140, statusBarFont);
+        currentMap.drawCircle(midX, midY, 10, TFT_BLACK);
+        currentMap.drawCircle(midX, midY, 6, TFT_BLACK);
+        currentMap.drawCircle(midX, midY, 3, TFT_BLACK);
     }
+
     currentMap.pushSprite(0, statusBarFont->yAdvance);
 }
 
 void setup()
 {
+    delay(20); // without SD does not boot reliable
     Serial.begin(115200);
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
     sdIsMounted = SD.begin(SDCARD_SS);
@@ -287,7 +312,7 @@ void setup()
     selectNetwork();
     configTzTime(TIMEZONE, NTP_POOL);
 
-    vTaskPrioritySet(NULL, 9);
+    vTaskPrioritySet(NULL, 11);
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
 }
@@ -333,6 +358,24 @@ bool confirm(LGFX_Device &dest, int32_t buttonIndex)
     return true;
 }
 
+void logGPSData()
+{
+    if (!gps.location.isValid() || !gps.altitude.isValid() || !gps.time.isValid())
+        return;
+
+    // Format: TIME,LAT,LON,ALT
+    char line[64];
+    snprintf(line, sizeof(line), "%04d-%02d-%02dT%02d:%02d:%02dZ,%.6f,%.6f,%.1f\n",
+             gps.date.year(), gps.date.month(), gps.date.day(),
+             gps.time.hour(), gps.time.minute(), gps.time.second(),
+             gps.location.lat(), gps.location.lng(), gps.altitude.meters());
+
+    logFile.print(line);
+    logFile.flush();
+
+    log_v("location to %s , %lu bytes total", logFile.name(), logFile.size());
+}
+
 bool handleTouchScreen(LGFX_Device &dest)
 {
     uint16_t x, y;
@@ -361,39 +404,59 @@ bool handleTouchScreen(LGFX_Device &dest)
     dest.setTextDatum(middle_center);
     dest.setTextColor(TFT_BLACK, color);
 
-    // TODO: (cheap) sanity checks on SD presence
-
     const char *buttonTexts[3][2] = {
         {sdIsMounted ? (isRecording ? "REC" : "Start") : "NO SD", "Log"},
         {"Save", "Home"},
         {isRecording ? "STOP" : "", ""}};
 
-    dest.drawString(buttonTexts[buttonIndex][0], textX, textY - DejaVu24.yAdvance, &DejaVu24);
-    dest.drawString(buttonTexts[buttonIndex][1], textX, textY, &DejaVu24);
+    static constexpr GFXfont const *font = &DejaVu24;
+    dest.drawString(buttonTexts[buttonIndex][0], textX, textY - font->yAdvance, font);
+    dest.drawString(buttonTexts[buttonIndex][1], textX, textY, font);
 
     if (!confirm(display, buttonIndex))
     {
-        vTaskDelay(pdMS_TO_TICKS(300));
+        vTaskDelay(pdMS_TO_TICKS(300)); // change so that statusbar is updated
         return true;
     }
 
     dest.fillRect(buttonX, dest.height() - MENU_HEIGHT, BUTTON_WIDTH, MENU_HEIGHT, TFT_WHITE);
     dest.setTextColor(TFT_BLACK, TFT_WHITE);
 
+    static char filename[32];
     switch (buttonIndex)
     {
     case 0:
         if (sdIsMounted && !isRecording)
         {
+            int fileIndex = 1;
+            do
+            {
+                snprintf(filename, sizeof(filename), "/gps_track%d.txt", fileIndex);
+                fileIndex++;
+            } while (SD.exists(filename));
+
+            log_i("Opening `%s`", filename);
+
+            logFile = SD.open(filename, FILE_APPEND);
+            if (!logFile)
+            {
+                dest.drawString("ERROR", textX, textY - font->yAdvance, font);
+                break;
+            }
+            display.fillCircle(MAP_REC_OFFSET, MAP_REC_OFFSET + statusBarFont->yAdvance, MAP_REC_SIZE, TFT_RED);
+
+            // write a data header for conversion tools
+            logFile.print("timestamp,latitude,longitude,altitude\n");
             isRecording = true;
-            dest.drawString("Logging", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+            dest.drawString("Logging", textX, textY - font->yAdvance, font);
+            currentMap.fillCircle(MAP_REC_OFFSET, MAP_REC_OFFSET, MAP_REC_SIZE, TFT_RED);
         }
         else if (!sdIsMounted)
-            dest.drawString("No SD", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+            dest.drawString("No SD", textX, textY - font->yAdvance, font);
         break;
     case 1:
-        dest.drawString("Home", textX, textY - DejaVu24.yAdvance, &DejaVu24);
-        dest.drawString("Saved", textX, textY, &DejaVu24);
+        dest.drawString("Home", textX, textY - font->yAdvance, font);
+        dest.drawString("Saved", textX, textY, font);
         homeLatitude = gps.location.lat();
         homeLongitude = gps.location.lng();
         {
@@ -404,8 +467,11 @@ bool handleTouchScreen(LGFX_Device &dest)
     case 2:
         if (isRecording)
         {
+            logFile.flush();
+            log_i("Closing `%s` size: %lu bytes", filename, logFile.size());
+            logFile.close();
             isRecording = false;
-            dest.drawString("Stopped", textX, textY - DejaVu24.yAdvance, &DejaVu24);
+            dest.drawString("Stopped", textX, textY - font->yAdvance, font);
         }
         break;
     default:
@@ -421,11 +487,11 @@ void loop()
     if (handleTouchScreen(display))
         drawMap(currentMap);
 
-    constexpr unsigned long gpsTimeoutThreshold = 3000;
+    static constexpr unsigned long GPS_TIMEOUT_MS = 6000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
-        if (millis() - lastGpsUpdate > gpsTimeoutThreshold)
+        if (millis() - lastGpsUpdate > GPS_TIMEOUT_MS)
         {
             String result = "GPS Wiring or Antenna Error";
             showStatusBar(SHOW_STRING, result);
@@ -435,10 +501,11 @@ void loop()
     }
     lastGpsUpdate = millis();
 
-    if (isRecording)
+    static unsigned long lastSaveMS = 0;
+    if (isRecording && millis() - lastSaveMS > SAVE_INTERVAL_MS)
     {
-        // save a [location and time] to a vector
-        // once [x] sets are collected write to file
+        logGPSData();
+        lastSaveMS = millis();
     }
 
     String str;
