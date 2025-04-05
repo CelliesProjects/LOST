@@ -28,6 +28,7 @@ constexpr char *NTP_POOL = "nl.pool.ntp.org";
 constexpr NetworkDetails net1("wifi network1", "wifi network 1 password");
 constexpr NetworkDetails net2("wifi network2", "wifi network 2 password");
 
+// All networks defined above must be added here
 constexpr NetworkDetails knownNetworks[] = {net1, net2};
 
 #endif
