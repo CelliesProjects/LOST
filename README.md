@@ -1,4 +1,4 @@
-# LOST GPS logger
+# LOST
 
 LOST is a lightweight GPS logging and mapping tool built for ESP32 devices. It combines real-time OpenStreetMap rendering with GPS tracking and SD card logging in a compact, touch-friendly interface.
 
@@ -64,18 +64,24 @@ Use of any OSMF provided service is governed by the [OSMF Terms of Use](https://
 
 This project is not endorsed by or affiliated with the OpenStreetMap Foundation.
 
-## Screenshots
+## Usage and screenshots
 
 ### Selecting a predefined network
 
-![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)
+![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)  
+Touch the network you want to use. 
 
-## Start logging with the left button
+- The selection menu will only be shown when more than 1 known network is found
 
-![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2)
-Use the left button to stop logging.
+### Start logging with the left button
 
-## Set a home location with middle button
+![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2)  
+A indicator and the current filename will be shown while logging.
 
-![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)
-Sets a new home location until reboot. Use `secrets.h` to set your default home location.
+- Stop logging with the right button
+
+### Set a home location with middle button
+
+![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)  
+
+- Sets a new home location until reboot. Use `secrets.h` to set a default home location.
