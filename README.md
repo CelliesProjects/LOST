@@ -17,7 +17,7 @@ Currently only tested on a M5stack Core2 with a M5Stack GNNS module.
 
 This is a [PlatformIO](https://platformio.org/) project, you will need VSCode with the PlatformIO plugin installed.
 
-Set your network details
+### Set your network details
 
 Before flashing the following source should be adjusted to your needs and saved as `src/secrets.h`.
 
@@ -64,18 +64,18 @@ Use of any OSMF provided service is governed by the [OSMF Terms of Use](https://
 
 This project is not endorsed by or affiliated with the OpenStreetMap Foundation.
 
-### Screenshots
+## Screenshots
 
-## Selecting a predefined network
+### Selecting a predefined network
 
-![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)  
+![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)
 
 ## Start logging with the left button
 
-![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2)  
+![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2)
 Use the left button to stop logging.
 
 ## Set a home location with middle button
 
-![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)  
+![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)
 Sets a new home location until reboot. Use `secrets.h` to set your default home location.
