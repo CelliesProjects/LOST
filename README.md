@@ -4,11 +4,9 @@ LOST is a lightweight GPS logging and mapping tool built for ESP32 devices. It c
 
 ![LOSTboot](https://github.com/user-attachments/assets/74453081-2dcb-4764-8027-8fac877fa1d9)
 
-
-
 The project showcases:
 
-- Tile-based OSM map rendering using LovyanGFX OpenStreetMap and PNGdec
+- Tile-based OSM map rendering using LovyanGFX, OpenStreetMap and PNGdec
 - GPS tracking via TinyGPS++
 - Status bar with local time, GPS fix info
 - Progressive confirmation buttons using LovyanGFX
@@ -19,11 +17,7 @@ Currently only tested on a M5stack Core2 with a M5Stack GNNS module.
 
 This is a [PlatformIO](https://platformio.org/) project, you will need VSCode with the PlatformIO plugin installed.
 
-### Libraries needed
-
-This project depends on [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [OpenStreetMap](https://github.com/CelliesProjects/OpenStreetMap-esp32), [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) and [PNGdec](https://github.com/bitbank2/PNGdec) to get the work done. 
-
-### Set your network details
+Set your network details
 
 Before flashing the following source should be adjusted to your needs and saved as `src/secrets.h`.
 
@@ -52,6 +46,10 @@ constexpr NetworkDetails knownNetworks[] = {net1, net2};
 
 ```
 
+### Libraries used
+
+This project depends on [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [OpenStreetMap](https://github.com/CelliesProjects/OpenStreetMap-esp32), [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) and [PNGdec](https://github.com/bitbank2/PNGdec) to get the work done.
+
 ## License differences between this library and the map data
 
 ### This library has a MIT license
@@ -68,5 +66,16 @@ This project is not endorsed by or affiliated with the OpenStreetMap Foundation.
 
 ### Screenshots
 
-![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)  ![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2) ![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)
+## Selecting a predefined network
 
+![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)  
+
+## Start logging with the left button
+
+![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2)  
+Use the left button to stop logging.
+
+## Set a home location with middle button
+
+![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)  
+Sets a new home location until reboot. Use `secrets.h` to set your default home location.
