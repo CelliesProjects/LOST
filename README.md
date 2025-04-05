@@ -2,7 +2,9 @@
 
 LOST is a lightweight GPS logging and mapping tool built for ESP32 devices. It combines real-time OpenStreetMap rendering with GPS tracking and SD card logging in a compact, touch-friendly interface.
 
-![LOSTboot](https://github.com/user-attachments/assets/74453081-2dcb-4764-8027-8fac877fa1d9)
+![LOSTboot](https://github.com/user-attachments/assets/74453081-2dcb-4764-8027-8fac877fa1d9)  ![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2) ![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)
+
+
 
 The project showcases:
 
