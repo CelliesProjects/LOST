@@ -68,4 +68,5 @@ This project is not endorsed by or affiliated with the OpenStreetMap Foundation.
 
 ### Screenshots
 
-![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2) ![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)
+![NetWorkList](https://github.com/user-attachments/assets/b6fe77bb-170a-4f90-ac07-9bab83c4398e)  ![LOSTlogging](https://github.com/user-attachments/assets/aa3da55d-3aa6-42d1-9d12-b49e8398cfa2) ![LOSThome](https://github.com/user-attachments/assets/bc1533f4-0297-4343-a5f1-34552c6355f4)
+
