@@ -260,8 +260,8 @@ bool showStatusBar(statusBarType type, String &result)
 void showProgramName(int32_t midX)
 {
     constexpr char *PROGRAM_NAME = "LOST";
-    constexpr char *LOST = "LGFX - OSM - TinyGPS";
-    constexpr char *AND_PNGDEC = "and PNGdec";
+    constexpr char *LOST = "LGFX OSM TinyGPS";
+    constexpr char *AND_PNGDEC = "PNGdec";
 
     currentMap.setTextColor(TFT_BLACK);
     currentMap.drawCenterString(PROGRAM_NAME, midX - 1, 30, &DejaVu72);
@@ -311,12 +311,13 @@ void setup()
 {
     Serial.begin(115200);
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
-    delay(30); // without a delay SD does not boot reliable
-    sdIsMounted = SD.begin(SDCARD_SS);
+    //delay(30); // without a delay SD does not boot reliable
 
     display.setRotation(0);
     display.setBrightness(110);
     display.begin();
+
+    sdIsMounted = SD.begin(SDCARD_SS);
 
     WiFi.mode(WIFI_STA);
     selectNetwork();
