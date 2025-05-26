@@ -4,7 +4,7 @@
 
 #include <LGFX_AUTODETECT.hpp>
 #include <LovyanGFX.hpp>
-#include <OpenStreetMap-esp32.h>
+#include <OpenStreetMap-esp32.hpp>
 #include <TinyGPS++.h>
 #include <PNGdec.h>
 
@@ -175,6 +175,9 @@ void selectNetwork()
         while (!display.getTouch(&x, &y))
             vTaskDelay(pdMS_TO_TICKS(10));
     }
+
+    display.fillScreen(TFT_BLACK);
+    display.drawCenterString("Connecting", display.width() / 2, (display.height() / 2) - 30, &DejaVu18);
 }
 
 void drawMap(LGFX_Sprite &map)
@@ -311,8 +314,6 @@ void setup()
 {
     Serial.begin(115200);
     hws.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin);
-    //delay(30); // without a delay SD does not boot reliable
-
     display.setRotation(0);
     display.setBrightness(110);
     display.begin();
@@ -326,6 +327,10 @@ void setup()
     vTaskPrioritySet(NULL, 11); // Turn it to 11!
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
     osm.resizeTilesCache(20);
+
+    display.fillScreen(TFT_BLACK);
+    display.drawCenterString("Waiting for GPS signal", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
+    display.drawCenterString("May take up to 30 seconds", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
 }
 
 constexpr int32_t MENU_HEIGHT = 120;
@@ -503,14 +508,14 @@ bool handleTouchScreen(LGFX_Device &dest)
 
 void loop()
 {
-    if (handleTouchScreen(display))
+    if (gps.location.isValid() && handleTouchScreen(display))
         drawMap(currentMap);
 
     static constexpr unsigned long GPS_TIMEOUT_MS = 6000;
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
-        if (millis() - lastGpsUpdate > GPS_TIMEOUT_MS)
+        if (millis() > 30000 && millis() - lastGpsUpdate > GPS_TIMEOUT_MS)
         {
             String result = "GPS Wiring or Antenna Error";
             showStatusBar(SHOW_STRING, result);
