@@ -48,6 +48,11 @@ bool connectToNetwork(String &ssid)
             WiFi.begin(net.ssid, net.password);
             log_i("Connecting to %s...", net.ssid);
 
+            display.fillScreen(TFT_BLACK);
+            display.setTextColor(TFT_WHITE, TFT_BLACK);
+            display.drawCenterString("Connecting to", display.width() / 2, (display.height() / 2) - 15, &DejaVu18);
+            display.drawCenterString(net.ssid, display.width() / 2, (display.height() / 2) + 15, &DejaVu18);
+
             unsigned long startMs = millis();
             while (WiFi.status() != WL_CONNECTED && millis() - startMs < 10000)
                 vTaskDelay(pdMS_TO_TICKS(5));
@@ -140,8 +145,8 @@ void scanForKnownNetWorks(std::vector<String> &networks)
             break;
 
         display.fillScreen(TFT_BLACK);
-        display.drawCenterString("No known networks", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
-        display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+        display.drawCenterString("No known networks", display.width() / 2, (display.height() / 2 - 15), &DejaVu18);
+        display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 15, &DejaVu18);
 
         uint16_t x, y;
         while (!display.getTouch(&x, &y))
@@ -168,16 +173,13 @@ void selectNetwork()
             break;
 
         display.fillScreen(TFT_BLACK);
-        display.drawCenterString("Could not connect", display.width() / 2, (display.height() / 2) - 30, &DejaVu18);
-        display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+        display.drawCenterString("Could not connect", display.width() / 2, (display.height() / 2) - 15, &DejaVu18);
+        display.drawCenterString("Tap the screen to scan again", display.width() / 2, (display.height() / 2) + 15, &DejaVu18);
 
         uint16_t x, y;
         while (!display.getTouch(&x, &y))
             vTaskDelay(pdMS_TO_TICKS(10));
     }
-
-    display.fillScreen(TFT_BLACK);
-    display.drawCenterString("Connecting", display.width() / 2, (display.height() / 2) - 30, &DejaVu18);
 }
 
 void drawMap(LGFX_Sprite &map)
@@ -324,13 +326,13 @@ void setup()
     selectNetwork();
     configTzTime(TIME_ZONE, NTP_POOL);
 
-    vTaskPrioritySet(NULL, 11); // Turn it to 11!
+    osm.setRenderMode(RenderMode::FAST);
     osm.setSize(display.width(), display.height() - statusBarFont->yAdvance);
-    osm.resizeTilesCache(20);
+    // osm.resizeTilesCache(20);
 
     display.fillScreen(TFT_BLACK);
-    display.drawCenterString("Waiting for GPS signal", display.width() / 2, (display.height() / 2 - 30), &DejaVu18);
-    display.drawCenterString("May take up to 30 seconds", display.width() / 2, (display.height() / 2) + 30, &DejaVu18);
+    display.drawCenterString("Waiting for GPS signal", display.width() / 2, (display.height() / 2 - 15), &DejaVu18);
+    display.drawCenterString("May take up to 3 minutes", display.width() / 2, (display.height() / 2) + 15, &DejaVu18);
 }
 
 constexpr int32_t MENU_HEIGHT = 120;
@@ -515,7 +517,7 @@ void loop()
     static unsigned long lastGpsUpdate = millis();
     if (!waitForNewGPSLocation(10))
     {
-        if (millis() > 30000 && millis() - lastGpsUpdate > GPS_TIMEOUT_MS)
+        if (millis() > 180000 && millis() - lastGpsUpdate > GPS_TIMEOUT_MS)
         {
             String result = "GPS Wiring or Antenna Error";
             showStatusBar(SHOW_STRING, result);
@@ -536,7 +538,7 @@ void loop()
     showStatusBar(currentBarType, str);
 
     static unsigned long lastUpdateMs = 0;
-    if (millis() - lastUpdateMs > 500)
+    if (millis() - lastUpdateMs > 100)
     {
         drawFreshMap(gps.location.lng(), gps.location.lat(), zoom);
         lastUpdateMs = millis();
