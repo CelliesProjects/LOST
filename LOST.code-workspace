@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": ".pio/libdeps/m5stack-core2/OpenStreetMap-esp32"
+		}
+	],
+    "settings": {}
+}
